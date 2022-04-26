@@ -1,0 +1,14 @@
+plugins {
+    id 'java'
+}
+
+group 'ru.unclesema.ttb'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'ru.tinkoff.piapi:java-sdk-core:1.0-M7'
+}
