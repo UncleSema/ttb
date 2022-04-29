@@ -1,9 +1,12 @@
 plugins {
     id 'java'
+    id 'org.springframework.boot' version '2.6.7'
+    id 'io.spring.dependency-management' version '1.0.11.RELEASE'
 }
 
 group 'ru.unclesema.ttb'
 version '1.0-SNAPSHOT'
+sourceCompatibility = '17'
 
 repositories {
     mavenCentral()
