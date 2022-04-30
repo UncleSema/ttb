@@ -6,12 +6,12 @@ public class TestStrategy implements Strategy {
 
     @Override
     public boolean buy() {
-        return false;
+        return true;
     }
 
     @Override
     public boolean sell() {
-        return false;
+        return true;
     }
 
     @Override

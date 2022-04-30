@@ -1,0 +1,16 @@
+### Simulate
+POST http://{{host}}/simulate
+Content-Type: application/json
+
+{
+  "from": "2022-04-29 03:00",
+  "to": "2022-04-29 11:00",
+  "figiList": [
+    "BBG006L8G4H1",
+    "BBG00Y91R9T3"
+  ]
+}
+
+
+### List shores
+GET http://{{host}}/figi
