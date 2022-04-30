@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head>
+    <title>Мои инвестиции</title>
+    <link th:href="@{/css/style.css}" rel="stylesheet" />
+    <script type="text/javascript" th:src="@{/js/script.js}"></script>
+</head>
+<body>
+<form action="#" th:action="@{/simulate}" method="post" th:object="${request}">
+    <p>FROM <input type="date" th:field="*{from}"></p>
+    <p>TO <input type="date" th:field="*{to}"></p>
+    <p>List <input type="text" th:field="*{figiList}"></p>
+    <button>Simulate</button>
+</form>
+</body>
