@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="ru">
+<head>
+    <title>Мои инвестиции</title>
+    <link th:href="@{/css/style.css}" rel="stylesheet"/>
+    <script type="text/javascript" th:src="@{/js/script.js}"></script>
+</head>
+<body>
+<form action="#" th:action="@{/simulate}" method="post" th:object="${request}">
+    <label for="from">От</label>
+    <input type="date" id="from" th:field="*{from}" required>
+    <label for="to">До</label>
+    <input type="date" id="to" th:field="*{to}" required>
+    <label for="figi-list">Figi лист</label>
+    <div id="figi-list">
+        <input type="text" id="figiList-0" th:field="*{figiList[0]}" required>
+        <br>
+        <input type="text" id="figiList-1" th:field="*{figiList[1]}">
+        <br>
+        <input type="text" id="figiList-2" th:field="*{figiList[2]}">
+        <br>
+    </div>
+    <button type="button" onclick="addFigiInput()">Добавить поле для FIGI</button>
+    <button>Simulate</button>
+</form>
+</body>

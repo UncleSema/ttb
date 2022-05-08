@@ -12,9 +12,11 @@ repositories {
 }
 
 dependencies {
-    implementation 'ru.tinkoff.piapi:java-sdk-core:1.0-M7'
+    implementation 'ru.tinkoff.piapi:java-sdk-core:1.0-M8'
     implementation 'org.springframework.boot:spring-boot-starter-web:2.6.7'
     implementation 'org.springframework.boot:spring-boot-starter-thymeleaf:2.6.7'
+    implementation 'com.edwardraff:JSAT:0.0.9'
+    implementation 'com.jcabi:jcabi-aspects:0.23.2'
     
     compileOnly 'org.projectlombok:lombok'
     annotationProcessor 'org.projectlombok:lombok'

@@ -2,14 +2,108 @@
 <html xmlns:th="http://www.thymeleaf.org" lang="ru">
 <head>
     <title>Мои инвестиции</title>
-    <link th:href="@{/css/style.css}" rel="stylesheet" />
+    <meta charset="UTF-8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@100;400;500&display=swap" rel="stylesheet">
+    <link th:href="@{/css/style.css}" rel="stylesheet"/>
     <script type="text/javascript" th:src="@{/js/script.js}"></script>
 </head>
 <body>
-<form action="#" th:action="@{/simulate}" method="post" th:object="${request}">
-    <p>FROM <input type="date" th:field="*{from}"></p>
-    <p>TO <input type="date" th:field="*{to}"></p>
-    <p>List <input type="text" th:field="*{figiList}"></p>
-    <button>Simulate</button>
-</form>
+<div class="sidebar">
+    <th:block th:each="user, iStat : ${users}">
+        <a th:href="'#page-' + ${iStat.index}" th:text="${iStat.index}+1"></a>
+    </th:block>
+    <a href="#add">+</a>
+</div>
+<div class="main">
+    <th:block th:each="user, iStat : ${users}">
+        <div class="page" th:id="'page-'+${iStat.index}">
+            <div class="card">
+                <h4>Пользователь</h4>
+                <table>
+                    <tr>
+                        <th>Название</th>
+                        <th>Figi</th>
+                        <th>Количество</th>
+                        <th>Единичная стоимость</th>
+                        <th>Полная стоимость</th>
+                    </tr>
+                    <tr th:each="position : ${portfolioByUser.get(user).getPositions()}">
+                        <td th:text="${nameByFigi.getOrDefault(position.figi, '')}"></td>
+                        <td th:text="${position.figi}"/>
+                        <td th:text="${position.quantity.doubleValue()}"/>
+                        <td th:text="${position.currentPrice.value.doubleValue() + ' ' + position.currentPrice.currency}"/>
+                        <td th:text="${position.currentPrice.value.multiply(position.quantity).doubleValue() + ' ' + position.currentPrice.currency}"/>
+                    </tr>
+                </table>
+                <div class="tooltip">
+                    <button id="token-copy" th:attr="onclick=|onCopy('${user.token()}')|" onmouseout="onCopyOut()">
+                        <span id="copy-tip">Копировать в буфер обмена</span>
+                        Скопировать токен
+                    </button>
+                </div>
+            </div>
+            <div class="card">
+                <h4>Стратегия</h4>
+            </div>
+            <div class="card">
+                <h4>Ценные бумаги</h4>
+            </div>
+        </div>
+    </th:block>
+    <div class="page" id="add">
+        <div class="card">
+            <h4>Новый пользователь</h4>
+            <form action="/user" method="post">
+                <div>
+                    <label>
+                        <span>Введите токен:</span>
+                        <br>
+                        <input name="token" type="password" required>
+                    </label>
+                </div>
+                <div>
+                    <label>
+                        <span>Выберите режим:</span>
+                        <br>
+                        <select name="mode">
+                            <option value="SANDBOX">Песочница</option>
+                            <option value="MARKET">Биржа</option>
+                            <option value="ANALYZE">Анализ</option>
+                        </select>
+                    </label>
+                </div>
+                <div>
+                    <label>
+                        <span>Введите Id аккаунта:</span>
+                        <br>
+                        <input name="accountId" type="text" required>
+                    </label>
+                </div>
+                <div>
+                    <span>Figi list</span>
+                    <div id="figi-list">
+
+                    </div>
+                    <input type="hidden" name="figis" id="hidden-figi">
+                    <button type="button" onclick="addFigiField()">+</button>
+                </div>
+                <div>
+                    <label>
+                        <span>Выберите стратегию:</span>
+                        <br>
+                        <select name="temp-strategy">
+                            <option>RSI</option>
+                            <option>Стакан</option>
+                        </select>
+                    </label>
+
+                </div>
+                <button>Отправить</button>
+            </form>
+        </div>
+    </div>
+</div>
 </body>
+</html>

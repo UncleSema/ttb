@@ -1,5 +1,7 @@
 package ru.unclesema.ttb.strategy;
 
+import ru.tinkoff.piapi.contract.v1.OrderBook;
+
 /**
  * Интерфейс, с помощью которого можно реализовать свою стратегию.
  * Для этого достаточно:
@@ -10,6 +12,9 @@ package ru.unclesema.ttb.strategy;
  * </ul>
  */
 public interface Strategy {
+
+    StrategyDecision addOrderBook(OrderBook orderBook);
+
     /**
      * @return <code>true</code>, если ценная бумага рекомендованна к покупке и <code>false</code> иначе
      */
@@ -25,3 +30,4 @@ public interface Strategy {
      */
     StrategyConfig getConfig();
 }
+
