@@ -1,33 +1,24 @@
 package ru.unclesema.ttb.strategy;
 
-import ru.tinkoff.piapi.contract.v1.OrderBook;
+import java.util.Map;
 
 /**
  * Интерфейс, с помощью которого можно реализовать свою стратегию.
- * Для этого достаточно:
- * <ul>
- * <li> "сказать когда покупать" -- реализовать <code>buy</code> </li>
- * <li> "сказать когда продавать" -- реализовать <code>sell</code> </li>
- * <li> предоставить информацию для стратегии при помощи <code>StrategyConfig</code> </li>
- * </ul>
  */
 public interface Strategy {
+    String getName();
 
-    StrategyDecision addOrderBook(OrderBook orderBook);
+    default String getDescription() {
+        return "";
+    }
 
-    /**
-     * @return <code>true</code>, если ценная бумага рекомендованна к покупке и <code>false</code> иначе
-     */
-    boolean buy();
+    double getTakeProfit();
 
-    /**
-     * @return <code>true</code>, если ценная бумага рекомендованна к продаже и <code>false</code> иначе
-     */
-    boolean sell();
+    double getStopLoss();
 
     /**
-     * @return конфиг, которым параметризованна стратегия
+     * @return параметры стратегии для UI.
      */
-    StrategyConfig getConfig();
+    Map<String, Object> getUIAttributes();
 }
 

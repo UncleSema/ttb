@@ -5,6 +5,7 @@ import ru.unclesema.ttb.User;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 public class UserService {
@@ -20,5 +21,9 @@ public class UserService {
 
     public List<User> getAllUsers() {
         return users.stream().toList();
+    }
+
+    public Optional<User> findUserByHash(Integer userHash) {
+        return users.stream().filter(user -> userHash == user.hashCode()).findAny();
     }
 }

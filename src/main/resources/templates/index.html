@@ -10,17 +10,30 @@
     <script type="text/javascript" th:src="@{/js/script.js}"></script>
 </head>
 <body>
-<div class="sidebar">
-    <th:block th:each="user, iStat : ${users}">
+<aside>
+    <th:block th:each="user, iStat : ${frontService.getAllUsers()}">
         <a th:href="'#page-' + ${iStat.index}" th:text="${iStat.index}+1"></a>
     </th:block>
     <a href="#add">+</a>
-</div>
-<div class="main">
-    <th:block th:each="user, iStat : ${users}">
+</aside>
+<main>
+    <th:block th:each="user, iStat : ${frontService.getAllUsers()}">
         <div class="page" th:id="'page-'+${iStat.index}">
             <div class="card">
                 <h4>Пользователь</h4>
+                <p th:text="'Аккаунт ID: ' + ${user.accountId()}"></p>
+                <table>
+                    <tr>
+                        <th>Название</th>
+                        <th>Figi</th>
+                        <th>Валюта</th>
+                    </tr>
+                    <tr th:each="figi : ${user.figis()}">
+                        <td th:text="${figi}"/>
+                        <td th:text="${frontService.getInstrumentName(user, figi)}"/>
+                        <td th:text="${frontService.getInstrument(user, figi).getCurrency().toUpperCase()}"/>
+                    </tr>
+                </table>
                 <table>
                     <tr>
                         <th>Название</th>
@@ -29,12 +42,12 @@
                         <th>Единичная стоимость</th>
                         <th>Полная стоимость</th>
                     </tr>
-                    <tr th:each="position : ${portfolioByUser.get(user).getPositions()}">
-                        <td th:text="${nameByFigi.getOrDefault(position.figi, '')}"></td>
-                        <td th:text="${position.figi}"/>
-                        <td th:text="${position.quantity.doubleValue()}"/>
-                        <td th:text="${position.currentPrice.value.doubleValue() + ' ' + position.currentPrice.currency}"/>
-                        <td th:text="${position.currentPrice.value.multiply(position.quantity).doubleValue() + ' ' + position.currentPrice.currency}"/>
+                    <tr th:each="position : ${frontService.getRemainingInstruments(user)}">
+                        <td th:text="${frontService.getInstrumentName(user, position.key.figi)}"/>
+                        <td th:text="${position.key.figi}"/>
+                        <td th:text="${position.value}"/>
+                        <td th:text="${frontService.lastPriceToString(user, 1, position.key.figi)}"/>
+                        <td th:text="${frontService.lastPriceToString(user, position.value, position.key.figi)}"/>
                     </tr>
                 </table>
                 <div class="tooltip">
@@ -46,64 +59,121 @@
             </div>
             <div class="card">
                 <h4>Стратегия</h4>
+                <p th:text="'Максимальное количество денег, которое может потратить бот: ' + ${user.maxBalance()} + ' рублей'"></p>
+                <table>
+                    <tr>
+                        <th>Название параметра</th>
+                        <th>Значение параметра</th>
+                    </tr>
+                    <tr th:each="parameter : ${user.strategy().getUIAttributes()}">
+                        <td th:text="${parameter.key}"/>
+                        <td th:text="${parameter.value}"/>
+                    </tr>
+                </table>
             </div>
             <div class="card">
-                <h4>Ценные бумаги</h4>
+                <h4> Текущие результаты стратегии </h4>
+                <p th:text="'Заработано: ' + ${frontService.printBenefits(user)}"/>
+                <table>
+                    <tr>
+                        <th>Название</th>
+                        <th>Figi</th>
+                        <th>Дата</th>
+                        <th>Тип операции</th>
+                        <th>Стоимость</th>
+                    </tr>
+                    <tr th:each="operation : ${frontService.getStatement(user).operationsOrder()}">
+                        <td th:text="${frontService.getInstrumentName(user, operation.figi)}"/>
+                        <td th:text="${operation.figi}"/>
+                        <td th:text="${#temporals.format(frontService.getDate(operation), 'HH:mm:ss dd.MM.yyyy')}"/>
+                        <td th:text="${frontService.operationTypeToString(operation.operationType)}"/>
+                        <td th:text="${frontService.moneyValueToString(user, operation.figi, operation.getPayment())}"/>
+                    </tr>
+                </table>
+                <form th:action="${!frontService.isActive(user)} ? '/strategy/enable' : '/strategy/disable'"
+                      method="post">
+                    <input type="hidden" name="userHash" th:value="${user.hashCode()}">
+                    <button th:text="${!frontService.isActive(user)} ? 'Запустить стратегию' : 'Остановить стратегию'"/>
+                </form>
             </div>
         </div>
     </th:block>
     <div class="page" id="add">
         <div class="card">
             <h4>Новый пользователь</h4>
-            <form action="/user" method="post">
-                <div>
-                    <label>
-                        <span>Введите токен:</span>
-                        <br>
-                        <input name="token" type="password" required>
-                    </label>
-                </div>
-                <div>
-                    <label>
-                        <span>Выберите режим:</span>
-                        <br>
-                        <select name="mode">
-                            <option value="SANDBOX">Песочница</option>
-                            <option value="MARKET">Биржа</option>
-                            <option value="ANALYZE">Анализ</option>
-                        </select>
-                    </label>
-                </div>
-                <div>
-                    <label>
-                        <span>Введите Id аккаунта:</span>
-                        <br>
-                        <input name="accountId" type="text" required>
-                    </label>
-                </div>
-                <div>
-                    <span>Figi list</span>
-                    <div id="figi-list">
-
-                    </div>
-                    <input type="hidden" name="figis" id="hidden-figi">
-                    <button type="button" onclick="addFigiField()">+</button>
-                </div>
-                <div>
-                    <label>
-                        <span>Выберите стратегию:</span>
-                        <br>
-                        <select name="temp-strategy">
-                            <option>RSI</option>
-                            <option>Стакан</option>
-                        </select>
-                    </label>
-
-                </div>
-                <button>Отправить</button>
-            </form>
+            <p>Заполните поля ниже, чтобы настроить нового пользователя и бота для него.</p>
         </div>
+        <form action="/user" method="post" th:object="${newUserRequest}">
+            <fieldset class="card">
+                <h4>Информация о пользователе</h4>
+                <label>
+                    <span>Введите токен:</span>
+                    <br>
+                    <input th:field="*{token}" type="password" required>
+                </label>
+                <label>
+                    <span>Выберите режим:</span>
+                    <br>
+                    <select th:field="*{mode}">
+                        <option value="SANDBOX">Песочница</option>
+                        <option value="MARKET">Биржа</option>
+                        <option value="ANALYZE">Анализ</option>
+                    </select>
+                </label>
+                <label>
+                    <span>Введите Id аккаунта (или оставьте пустым, чтобы создать новый):</span>
+                    <br>
+                    <input type="text" th:field="*{accountId}">
+                </label>
+            </fieldset>
+            <fieldset class="card">
+                <h4>Настройки бота</h4>
+                <label>
+                    <span>Выберите стратегию:</span>
+                    <br>
+                    <select onchange="onSelectChanged(this)">
+                        <option th:each="s : ${frontService.getAvailableStrategies()}" th:text="${s.getName()}"/>
+                    </select>
+                </label>
+                <span>Параметры стратегии</span>
+                <table class="strategy" th:each="strat, stat : ${frontService.getAvailableStrategies()}"
+                       th:id="${strat.getName()}">
+                    <input type="hidden" id="strategyParametersname" name="strategyParameters[name]"
+                           th:value="${strat.getName()}" th:class="'st-form st-form-' + ${strat.getName()}"
+                           th:disabled="${stat.index != 0} ?: 'disabled'">
+                    <tr>
+                        <th>Параметр</th>
+                        <th>Значение</th>
+                    </tr>
+                    <tr th:each="par : ${strat.getUIAttributes()}">
+                        <td th:text="${par.key}"/>
+                        <td>
+                            <input type="text" th:value="${par.value}" th:id="'strategyParameters'+${par.key}"
+                                   th:name="'strategyParameters['+${par.key}+']'"
+                                   th:class="'st-form st-form-' + ${strat.getName()}"
+                                   th:disabled="${stat.index != 0} ?: 'disabled'">
+                        </td>
+                    </tr>
+                </table>
+                <label>
+                    <span>Введите максимальное количество рублей, которое может потратить бот:</span>
+                    <br>
+                    <input th:field="*{maxBalance}" type="number" required>
+                </label>
+                <span>Figi, за которыми будет следить бот</span>
+                <div id="figi-list">
+                </div>
+                <button type="button" onclick="addFigiField()">Добавить поле</button>
+                <input type="hidden" name="figis" id="figis">
+            </fieldset>
+            <fieldset class="card">
+                <h4>Отправка настроек</h4>
+                <p>Убедитесь, что всё заполнили верно. Бот будет запущен, только после того как Вы нажмёте `запустить`
+                    на странице пользователя, после его создания</p>
+                <button>Отправить</button>
+            </fieldset>
+        </form>
     </div>
-</div>
+</main>
 </body>
 </html>

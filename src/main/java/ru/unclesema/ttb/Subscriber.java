@@ -6,17 +6,21 @@ import ru.tinkoff.piapi.core.stream.StreamProcessor;
 import ru.unclesema.ttb.service.ApplicationService;
 
 @Slf4j
-public record OrderBookSubscriber(ApplicationService service,
-                                  User user) implements StreamProcessor<MarketDataResponse> {
+public record Subscriber(ApplicationService service, User user) implements StreamProcessor<MarketDataResponse> {
+
     @Override
     public void process(MarketDataResponse response) {
         if (response.hasOrderbook()) {
-            log.info(String.valueOf(response.getOrderbook()));
-            service.addNewOrderBook(this, response.getOrderbook());
+            log.debug(String.valueOf(response.getOrderbook()));
+            service.addNewOrderBook(response.getOrderbook());
         }
         if (response.hasLastPrice()) {
-            log.info(String.valueOf(response.getLastPrice()));
+            log.debug(String.valueOf(response.getLastPrice()));
             service.addLastPrice(response.getLastPrice());
+        }
+        if (response.hasCandle()) {
+            log.debug(String.valueOf(response.getCandle()));
+            service.addCandle();
         }
     }
 }

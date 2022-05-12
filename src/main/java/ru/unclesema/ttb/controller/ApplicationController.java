@@ -1,32 +1,21 @@
 package ru.unclesema.ttb.controller;
 
-import jsat.utils.Pair;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
+import org.springframework.ui.ModelMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.ResponseBody;
-import ru.tinkoff.piapi.core.models.Portfolio;
-import ru.tinkoff.piapi.core.models.Position;
-import ru.unclesema.ttb.User;
-import ru.unclesema.ttb.UserMode;
-import ru.unclesema.ttb.client.InvestClient;
+import org.springframework.web.servlet.ModelAndView;
+import ru.unclesema.ttb.NewUserRequest;
 import ru.unclesema.ttb.service.ApplicationService;
-import ru.unclesema.ttb.service.UserService;
-
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
+import ru.unclesema.ttb.service.FrontService;
 
 @Controller
 @RequiredArgsConstructor
 public class ApplicationController {
-    private final InvestClient investClient;
+    private final FrontService frontService;
     private final ApplicationService service;
-    private final UserService userService;
-
 //    @PostMapping("/simulate")
 //    public String simulate(@ModelAttribute SimulationRequest request, Model model) {
 //        SimulationResult result = service.simulate(request.getFigiList(), request.getFrom().atStartOfDay(), request.getTo().atStartOfDay());
@@ -35,38 +24,45 @@ public class ApplicationController {
 //        return "result";
 //    }
 
-
     @GetMapping("/")
-    public String index(Model model) {
-        List<User> users = userService.getAllUsers();
-        Map<User, Portfolio> portfolioByUser = users
-                .stream()
-                .collect(Collectors.toUnmodifiableMap(
-                        user -> user,
-                        investClient::getPortfolio));
-        Map<String, String> nameByFigi = portfolioByUser.values()
-                .stream()
-                .flatMap(portfolio -> portfolio.getPositions().stream().map(Position::getFigi))
-                .distinct()
-                .collect(Collectors.toUnmodifiableMap(
-                        figi -> figi,
-                        investClient::getNameByFigi));
-        model.addAttribute("users", users);
-        model.addAttribute("portfolioByUser", portfolioByUser);
-        model.addAttribute("nameByFigi", nameByFigi);
-        model.addAttribute("new-user", new User("", UserMode.SANDBOX, "", List.of(), null));
-        return "index";
+    public ModelAndView index(ModelMap model) {
+//        try {
+        model.addAttribute("newUserRequest", new NewUserRequest());
+        model.addAttribute("frontService", frontService);
+        return new ModelAndView("index", model);
+//        } catch (Exception e) {
+//            model.addAttribute(e);
+//            return new ModelAndView("redirect:/app-error", model);
+//        }
     }
 
-    @PostMapping("user")
-    public String addNewUser(User user) {
-        service.addNewUser(user);
+    @PostMapping("/user")
+    public ModelAndView addNewUser(ModelMap model, NewUserRequest request) {
+//        try {
+        service.addNewUser(request);
+//        } catch (Exception e) {
+//            System.err.println(e);
+//            model.addAttribute(e);
+//            return new ModelAndView("redirect:/app-error", model);
+//        }
+        return new ModelAndView("redirect:/");
+    }
+
+    @PostMapping("/strategy/enable")
+    public String enableStrategy(Integer userHash) {
+        service.enableStrategyForUser(userHash);
         return "redirect:/";
     }
 
-    @GetMapping("figis")
-    @ResponseBody
-    public List<Pair<String, String>> figis(@RequestBody User user) {
-        return service.figis(user).stream().map(e -> new Pair<>(e.getName(), e.getFigi())).toList();
+    @PostMapping("/strategy/disable")
+    public String disableStrategy(Integer userHash) {
+        service.disableStrategyForUser(userHash);
+        return "redirect:/";
+    }
+
+    @GetMapping("/app-error")
+    public String exceptionHandler(Model model, Exception e) {
+        model.addAttribute("msg", e.getMessage());
+        return "error-page";
     }
 }

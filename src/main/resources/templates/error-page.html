@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мои инвестиции</title>
+    <link th:href="@{/css/style.css}" rel="stylesheet"/>
+</head>
+<body>
+<aside>
+</aside>
+<main>
+    <div class="page">
+        <div class="card">
+            <h4> Произошла ошибка </h4>
+            <p>Детали ошибки Вы можете посмотреть в логах сервера, если не получится разобраться, то Вы можете завести
+                Issue
+                на <a href="https://github.com/UncleSema/ttb">GitHub</a>.</p>
+            <p>Текст ошибки: <i th:text="${msg}"></i></p>
+            <a href="/">
+                <button>Назад</button>
+            </a>
+        </div>
+    </div>
+</main>
+</body>
+</html>

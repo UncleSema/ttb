@@ -4,6 +4,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import ru.unclesema.ttb.cache.PortfolioStorage;
 import ru.unclesema.ttb.client.InvestClient;
+import ru.unclesema.ttb.strategy.RandomStrategy;
+import ru.unclesema.ttb.strategy.Strategy;
+import ru.unclesema.ttb.strategy.orderbook.OrderBookStrategyImpl;
+
+import java.util.List;
 
 @Component
 public class ApplicationModule {
@@ -13,28 +18,13 @@ public class ApplicationModule {
         return new InvestClient();
     }
 
-//    @Bean
-//    public AnalyzeClient getAnalyzeClient(InstrumentsCache instrumentsCache, PortfolioStorage storage) {
-//        return new AnalyzeClient(instrumentsCache, storage);
-//    }
-
-//    @Bean
-//    public UserService getUserService() {
-//        return new UserService();
-//    }
-
     @Bean
     public PortfolioStorage getPortfolioStorage() {
         return new PortfolioStorage();
     }
 
-//    @Bean
-//    public CandlesCache getCandlesCache(InvestApi api, InstrumentsCache instrumentsCache) {
-//        return new CandlesCache(api, instrumentsCache);
-//    }
-//
-//    @Bean
-//    public InstrumentsCache getInstrumentsCache(InvestApi api) {
-//        return new InstrumentsCache(api);
-//    }
+    @Bean
+    public List<Strategy> availableStrategies() {
+        return List.of(new OrderBookStrategyImpl(), new RandomStrategy());
+    }
 }
