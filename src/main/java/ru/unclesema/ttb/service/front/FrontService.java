@@ -1,4 +1,4 @@
-package ru.unclesema.ttb.service;
+package ru.unclesema.ttb.service.front;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -9,8 +9,10 @@ import ru.tinkoff.piapi.contract.v1.Operation;
 import ru.tinkoff.piapi.contract.v1.OperationType;
 import ru.unclesema.ttb.User;
 import ru.unclesema.ttb.client.InvestClient;
+import ru.unclesema.ttb.service.ApplicationService;
+import ru.unclesema.ttb.service.PriceService;
+import ru.unclesema.ttb.service.UserService;
 import ru.unclesema.ttb.strategy.Strategy;
-import ru.unclesema.ttb.strategy.StrategyStatement;
 import ru.unclesema.ttb.utility.Utility;
 
 import java.math.BigDecimal;
@@ -77,12 +79,8 @@ public class FrontService {
             return quantity.doubleValue() + " RUB";
         }
         String currency = getInstrument(user, figi).getCurrency();
-        BigDecimal lastPrice = getLastPrice(user, figi);
+        BigDecimal lastPrice = priceService.getLastPrice(user, figi);
         return lastPrice.multiply(quantity).doubleValue() + " " + currency.toUpperCase();
-    }
-
-    public BigDecimal getLastPrice(User user, String figi) {
-        return Utility.toBigDecimal(priceService.getLastPrice(user, figi).getPrice());
     }
 
     public String moneyValueToString(User user, String figi, MoneyValue value) {
@@ -91,15 +89,15 @@ public class FrontService {
     }
 
     public StrategyStatement getStatement(User user) {
-        List<Operation> operations = investClient.getOperations(user, appStartTime, Instant.now());
         Map<String, BigDecimal> benefitByCurrency = new HashMap<>();
         for (Map.Entry<Instrument, Long> entry : getRemainingInstruments(user).entrySet()) {
             Instrument instrument = entry.getKey();
             Long amount = entry.getValue();
             BigDecimal benefit = benefitByCurrency.getOrDefault(instrument.getCurrency(), BigDecimal.ZERO);
-            benefit = benefit.add(getLastPrice(user, instrument.getFigi()).multiply(BigDecimal.valueOf(amount)));
+            benefit = benefit.add(priceService.getLastPrice(user, instrument.getFigi()).multiply(BigDecimal.valueOf(amount)));
             benefitByCurrency.put(instrument.getCurrency(), benefit);
         }
+        List<Operation> operations = getOperations(user);
         for (Operation op : operations) {
             if (op.getInstrumentType().equalsIgnoreCase("currency")) continue;
             Instrument instrument = getInstrument(user, op.getFigi());
@@ -154,7 +152,7 @@ public class FrontService {
     }
 
     public List<Operation> getOperations(User user) {
-        return investClient.getOperations(user, appStartTime, Instant.now());
+        return investClient.getOperations(user, appStartTime, Instant.now()).join();
     }
 
     public LocalDateTime getDate(Operation op) {

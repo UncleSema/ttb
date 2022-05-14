@@ -2,17 +2,14 @@ package ru.unclesema.ttb.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import ru.tinkoff.piapi.contract.v1.LastPrice;
 import ru.tinkoff.piapi.contract.v1.OrderDirection;
-import ru.tinkoff.piapi.contract.v1.Quotation;
 import ru.unclesema.ttb.User;
 import ru.unclesema.ttb.client.InvestClient;
 import ru.unclesema.ttb.utility.Utility;
 
 import java.math.BigDecimal;
-import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
@@ -24,88 +21,64 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 public class PriceService {
     private final InvestClient client;
 
-    private final Map<String, LastPrice> lastPriceByFigi = new ConcurrentHashMap<>();
-    private final Map<String, Queue<TakeProfitRequest>> takeProfits = new ConcurrentHashMap<>();
-    private final Map<String, Queue<StopLossRequest>> stopLosses = new ConcurrentHashMap<>();
+    private final Map<String, BigDecimal> lastPriceByFigi = new ConcurrentHashMap<>();
+    private final Map<String, Queue<StopRequest>> openStopRequests = new ConcurrentHashMap<>();
 
-    public LastPrice getLastPrice(User user, String figi) {
+    public BigDecimal getLastPrice(User user, String figi) {
         if (figi.equalsIgnoreCase("FG0000000000")) {
-            return LastPrice.newBuilder().setPrice(Quotation.newBuilder().setUnits(1).build()).setFigi("FG0000000000").build();
+            return BigDecimal.ONE;
         }
         if (lastPriceByFigi.containsKey(figi)) {
             return lastPriceByFigi.get(figi);
         }
-        return loadLastPrice(user, figi);
-    }
-
-    @Cacheable(value = "5s")
-    public LastPrice loadLastPrice(User user, String figi) {
-        log.warn("Запрос к api о последней цене для {}. Он точно не должен быть закеширован?", figi);
-        return user.api().getMarketDataService().getLastPricesSync(List.of(figi)).get(0);
+        return client.loadLastPrice(user, figi).join();
     }
 
     public void addLastPrice(LastPrice price) {
-        lastPriceByFigi.put(price.getFigi(), price);
-        checkTakeProfits(price);
-        checkStopLosses(price);
+        lastPriceByFigi.put(price.getFigi(), Utility.toBigDecimal(price.getPrice()));
+        checkStopRequests(price);
     }
 
-    public void addTakeProfit(TakeProfitRequest request) {
-        if (!takeProfits.containsKey(request.figi())) {
-            takeProfits.put(request.figi(), new ConcurrentLinkedQueue<>());
+    public void addStopRequest(StopRequest request) {
+        if (!openStopRequests.containsKey(request.figi())) {
+            openStopRequests.put(request.figi(), new ConcurrentLinkedQueue<>());
         }
-        takeProfits.get(request.figi()).add(request);
+        openStopRequests.get(request.figi()).add(request);
     }
 
-    public void addStopLoss(StopLossRequest request) {
-        if (!stopLosses.containsKey(request.figi())) {
-            stopLosses.put(request.figi(), new ConcurrentLinkedQueue<>());
-        }
-        stopLosses.get(request.figi()).add(request);
-    }
-
-    private void checkTakeProfits(LastPrice price) {
-        if (!takeProfits.containsKey(price.getFigi())) return;
-        Queue<TakeProfitRequest> requests = takeProfits.get(price.getFigi());
+    private void checkStopRequests(LastPrice price) {
+        if (!openStopRequests.containsKey(price.getFigi())) return;
+        Queue<StopRequest> requests = openStopRequests.get(price.getFigi());
         BigDecimal lastPrice = Utility.toBigDecimal(price.getPrice());
         requests.removeIf(request -> {
-            if (request.price().compareTo(lastPrice) <= 0) {
-                if (request.direction() == OrderDirection.ORDER_DIRECTION_SELL && client.sellMarket(request.user(), request.figi(), request.price())) {
-                    return true;
+            if (request.direction() == OrderDirection.ORDER_DIRECTION_SELL) {
+                BigDecimal sellPrice;
+                if (request.takeProfit().compareTo(lastPrice) <= 0) {
+                    sellPrice = request.takeProfit();
+                } else if (request.stopLoss().compareTo(lastPrice) > 0) {
+                    sellPrice = request.stopLoss();
+                } else {
+                    return false;
                 }
-            } else {
-                if (request.direction() == OrderDirection.ORDER_DIRECTION_BUY && client.buyMarket(request.user(), request.figi(), request.price())) {
-                    return true;
+                log.info("Сработала стоп-заяка для {}, продажа по цене {}", price.getFigi(), sellPrice);
+                return client.sellMarket(request.user(), request.figi(), sellPrice).join() != null;
+            } else if (request.direction() == OrderDirection.ORDER_DIRECTION_BUY) {
+                BigDecimal buyPrice;
+                if (request.takeProfit().compareTo(lastPrice) >= 0) {
+                    buyPrice = request.takeProfit();
+                } else if (request.stopLoss().compareTo(lastPrice) < 0) {
+                    buyPrice = request.stopLoss();
+                } else {
+                    return false;
                 }
+                log.info("Сработала стоп-заяка для {}, покупка по цене {}", price.getFigi(), buyPrice);
+                return client.buyMarket(request.user(), request.figi(), buyPrice).join() != null;
             }
             return false;
         });
     }
-
-    private void checkStopLosses(LastPrice price) {
-        if (!stopLosses.containsKey(price.getFigi())) return;
-        Queue<StopLossRequest> requests = stopLosses.get(price.getFigi());
-        BigDecimal lastPrice = Utility.toBigDecimal(price.getPrice());
-        requests.removeIf(request -> {
-            if (request.price().compareTo(lastPrice) >= 0) {
-                if (request.direction() == OrderDirection.ORDER_DIRECTION_SELL && client.sellMarket(request.user(), request.figi(), request.price())) {
-                    return true;
-                }
-            } else {
-                if (request.direction() == OrderDirection.ORDER_DIRECTION_BUY && client.buyMarket(request.user(), request.figi(), request.price())) {
-                    return true;
-                }
-            }
-            return false;
-        });
-    }
-
 }
 
-record TakeProfitRequest(User user, String figi, BigDecimal price, OrderDirection direction) {
-
+record StopRequest(User user, String figi, BigDecimal takeProfit, BigDecimal stopLoss, OrderDirection direction) {
 }
 
-record StopLossRequest(User user, String figi, BigDecimal price, OrderDirection direction) {
-
-}

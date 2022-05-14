@@ -15,32 +15,27 @@ import java.util.concurrent.TimeUnit;
 @EnableCaching
 public class CaffeineCacheConfiguration extends CachingConfigurerSupport {
     @Bean
-    public CacheManager cache15s() {
-        CaffeineCacheManager caffeineCacheManager = new CaffeineCacheManager();
-        caffeineCacheManager.setCaffeine(Caffeine
-                .newBuilder()
-                .maximumSize(1000)
-                .expireAfterAccess(15, TimeUnit.SECONDS));
-        return caffeineCacheManager;
+    public CacheManager cache10s() {
+        return caffeineCacheManager(10, TimeUnit.SECONDS);
     }
 
     @Bean
     public CacheManager cache5s() {
-        CaffeineCacheManager caffeineCacheManager = new CaffeineCacheManager();
-        caffeineCacheManager.setCaffeine(Caffeine
-                .newBuilder()
-                .maximumSize(1000)
-                .expireAfterAccess(5, TimeUnit.SECONDS));
-        return caffeineCacheManager;
+        return caffeineCacheManager(5, TimeUnit.SECONDS);
     }
 
     @Bean
     @Primary
-    public CacheManager cacheForever() {
+    public CacheManager cache1d() {
+        return caffeineCacheManager(1, TimeUnit.DAYS);
+    }
+
+    private CaffeineCacheManager caffeineCacheManager(long duration, TimeUnit unit) {
         CaffeineCacheManager caffeineCacheManager = new CaffeineCacheManager();
         caffeineCacheManager.setCaffeine(Caffeine
                 .newBuilder()
                 .maximumSize(1000)
+                .expireAfterAccess(duration, unit)
         );
         return caffeineCacheManager;
     }

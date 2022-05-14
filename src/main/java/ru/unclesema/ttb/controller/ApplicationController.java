@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.ModelAndView;
 import ru.unclesema.ttb.NewUserRequest;
 import ru.unclesema.ttb.service.ApplicationService;
-import ru.unclesema.ttb.service.FrontService;
+import ru.unclesema.ttb.service.front.FrontService;
 
 @Controller
 @RequiredArgsConstructor
@@ -49,8 +49,8 @@ public class ApplicationController {
     }
 
     @PostMapping("/strategy/enable")
-    public String enableStrategy(Integer userHash) {
-        service.enableStrategyForUser(userHash);
+    public String enableStrategy(String accountId) {
+        service.enableStrategyForUser(accountId);
         return "redirect:/";
     }
 

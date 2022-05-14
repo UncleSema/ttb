@@ -1,4 +1,4 @@
-package ru.unclesema.ttb.strategy;
+package ru.unclesema.ttb.service.front;
 
 import ru.tinkoff.piapi.contract.v1.Operation;
 

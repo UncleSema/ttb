@@ -4,6 +4,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import ru.tinkoff.piapi.contract.v1.*;
+import ru.tinkoff.piapi.core.InvestApi;
+import ru.tinkoff.piapi.core.models.Portfolio;
+import ru.tinkoff.piapi.core.stream.MarketDataSubscriptionService;
 import ru.unclesema.ttb.Subscriber;
 import ru.unclesema.ttb.User;
 import ru.unclesema.ttb.UserMode;
@@ -13,17 +16,36 @@ import ru.unclesema.ttb.utility.Utility;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @RequiredArgsConstructor
 public class InvestClient {
+    private static final String APP_NAME = "ru.unclesema.ttb";
     private final Map<User, String> streamIdByUser = new HashMap<>();
-    private static final List<String> currencies = List.of("BBG0013HGFT4");
+    private final Map<String, InvestApi> apiByToken = new HashMap<>();
+
+    public String addSandboxUser(String token) {
+        InvestApi api = InvestApi.createSandbox(token, APP_NAME);
+        apiByToken.put(token, api);
+        return api.getSandboxService().openAccountSync();
+    }
+
+    public void addMarketUser(String token) {
+        apiByToken.put(token, InvestApi.create(token, APP_NAME));
+    }
+
+    private InvestApi api(User user) {
+        if (!apiByToken.containsKey(user.token())) {
+            throw new IllegalStateException("Запрошено api для неизвестного пользователя " + user);
+        }
+        return apiByToken.get(user.token());
+    }
 
     public boolean buy(User user, String figi, BigDecimal price) {
         if (user.mode() == UserMode.SANDBOX) {
             log.info("Запрос на покупку {} за {}.", figi, price);
-            PostOrderResponse response = user.api().getSandboxService().postOrderSync(
+            PostOrderResponse response = api(user).getSandboxService().postOrderSync(
                     figi,
                     1,
                     Utility.toQuotation(price),
@@ -39,10 +61,10 @@ public class InvestClient {
         return true;
     }
 
-    public boolean buyMarket(User user, String figi, BigDecimal price) {
+    public CompletableFuture<PostOrderResponse> buyMarket(User user, String figi, BigDecimal price) {
         if (user.mode() == UserMode.SANDBOX) {
             log.info("Запрос на покупку {} по рыночной цене.", figi);
-            PostOrderResponse response = user.api().getSandboxService().postOrderSync(
+            CompletableFuture<PostOrderResponse> response = api(user).getSandboxService().postOrder(
                     figi,
                     1,
                     Utility.toQuotation(price),
@@ -51,17 +73,20 @@ public class InvestClient {
                     OrderType.ORDER_TYPE_MARKET,
                     UUID.randomUUID().toString()
             );
-            log.info(String.valueOf(response));
+            return response.exceptionally(e -> {
+                log.error("Ошибка при запросе на покупку", e);
+                return null;
+            });
         } else {
 
         }
-        return true;
+        return null;
     }
 
     public boolean sell(User user, String figi, BigDecimal price) {
         if (user.mode() == UserMode.SANDBOX) {
             log.info("Запрос на продажу {} за {}. {}", figi, price, Utility.toQuotation(price));
-            PostOrderResponse response = user.api().getSandboxService().postOrderSync(
+            PostOrderResponse response = api(user).getSandboxService().postOrderSync(
                     figi,
                     1,
                     Utility.toQuotation(price),
@@ -70,17 +95,16 @@ public class InvestClient {
                     OrderType.ORDER_TYPE_LIMIT,
                     UUID.randomUUID().toString()
             );
-            log.info(String.valueOf(response));
         } else {
 
         }
         return true;
     }
 
-    public boolean sellMarket(User user, String figi, BigDecimal price) {
+    public CompletableFuture<PostOrderResponse> sellMarket(User user, String figi, BigDecimal price) {
         if (user.mode() == UserMode.SANDBOX) {
             log.info("Запрос на продажу {} по рыночной цене.", figi);
-            PostOrderResponse response = user.api().getSandboxService().postOrderSync(
+            CompletableFuture<PostOrderResponse> response = api(user).getSandboxService().postOrder(
                     figi,
                     1,
                     Utility.toQuotation(price),
@@ -89,116 +113,133 @@ public class InvestClient {
                     OrderType.ORDER_TYPE_MARKET,
                     UUID.randomUUID().toString()
             );
-            log.info(String.valueOf(response));
+            return response.exceptionally(e -> {
+                log.error("Ошибка при запросе на продажу", e);
+                return null;
+            });
         } else {
 
-        }
-        return true;
-    }
-
-    public void subscribeOrderBook(User user, Subscriber subscriber) {
-        String streamId;
-        if (streamIdByUser.containsKey(user)) {
-            streamId = streamIdByUser.get(user);
-        } else {
-            streamId = UUID.randomUUID().toString();
-            streamIdByUser.put(user, streamId);
-        }
-        user.api().getMarketDataStreamService().newStream(streamId, subscriber, e ->
-                log.error("Произошла ошибка у " + user, e)
-        ).subscribeOrderbook(user.figis(), 20);
-    }
-
-    public void subscribeLastPrices(User user, Subscriber subscriber) {
-        String streamId;
-        if (streamIdByUser.containsKey(user)) {
-            streamId = streamIdByUser.get(user);
-        } else {
-            streamId = UUID.randomUUID().toString();
-            streamIdByUser.put(user, streamId);
-        }
-        List<String> figis = new ArrayList<>(user.figis());
-        figis.addAll(currencies);
-        user.api().getMarketDataStreamService().newStream(streamId, subscriber, e ->
-                log.error("Произошла ошибка у " + user, e)
-        ).subscribeLastPrices(figis);
-    }
-
-    public void subscribeCandles(User user, Subscriber subscriber) {
-        String streamId;
-        if (streamIdByUser.containsKey(user)) {
-            streamId = streamIdByUser.get(user);
-        } else {
-            streamId = UUID.randomUUID().toString();
-            streamIdByUser.put(user, streamId);
-        }
-        user.api().getMarketDataStreamService().newStream(streamId, subscriber, e ->
-                log.error("Произошла ошибка у " + user, e)
-        ).subscribeCandles(user.figis());
-    }
-
-    public void unSubscribeOrderBook(Subscriber subscriber) {
-        User user = subscriber.user();
-        if (!streamIdByUser.containsKey(user)) {
-            log.error("Попытка отписаться от потока для пользователя, который не был подписан " + user);
-            return;
-        }
-        user.api()
-                .getMarketDataStreamService()
-                .getStreamById(streamIdByUser.get(user)).unsubscribeOrderbook(user.figis(), 20);
-    }
-
-    public void unSubscribeCandles(Subscriber subscriber) {
-        User user = subscriber.user();
-        if (!streamIdByUser.containsKey(user)) {
-            log.error("Попытка отписаться от потока для пользователя, который не был подписан " + user);
-            return;
-        }
-        user.api()
-                .getMarketDataStreamService()
-                .getStreamById(streamIdByUser.get(user)).unsubscribeCandles(user.figis());
-    }
-
-    public void unSubscribeLastPrices(Subscriber subscriber) {
-        User user = subscriber.user();
-        if (!streamIdByUser.containsKey(user)) {
-            log.error("Попытка отписаться от потока для пользователя, который не был подписан " + user);
-            return;
-        }
-        user.api()
-                .getMarketDataStreamService()
-                .getStreamById(streamIdByUser.get(user)).unsubscribeLastPrices(user.figis());
-    }
-
-    @Cacheable(value = "portfolio", cacheManager = "cache5s")
-    public CachedPortfolio getPortfolio(User user) {
-        if (user.mode() == UserMode.SANDBOX) {
-            PortfolioResponse response = user.api().getSandboxService().getPortfolioSync(user.accountId());
-            return CachedPortfolio.of(response);
-        }
-        if (user.mode() == UserMode.MARKET) {
-            return CachedPortfolio.of(user.api().getOperationsService().getPortfolioSync(user.accountId()));
         }
         return null;
     }
 
-    @Cacheable(value = "operations", cacheManager = "cache15s", key = "#user")
-    public List<Operation> getOperations(User user, Instant from, Instant to) {
-        List<Operation> operations = new ArrayList<>();
-        if (user.mode() == UserMode.SANDBOX) {
-            for (String figi : user.figis()) {
-                List<Operation> cur = user.api().getSandboxService().getOperationsSync(user.accountId(), from, to, OperationState.OPERATION_STATE_EXECUTED, figi);
-                operations.addAll(cur);
-            }
-        } else if (user.mode() == UserMode.MARKET) {
-            operations = user.api().getOperationsService().getAllOperationsSync(user.accountId(), from, to);
+    public void subscribe(Subscriber subscriber, InstrumentType type) {
+        log.info("Запрос к api о подписке на {} для {}", type, subscriber.user());
+        User user = subscriber.user();
+        String streamId;
+        if (streamIdByUser.containsKey(user)) {
+            streamId = streamIdByUser.get(user);
+        } else {
+            streamId = UUID.randomUUID().toString();
+            streamIdByUser.put(user, streamId);
         }
-        operations.sort(Comparator.comparingLong(o -> o.getDate().getSeconds()));
-        return operations;
+        MarketDataSubscriptionService subscriptionService = api(user)
+                .getMarketDataStreamService()
+                .newStream(streamId, subscriber, e -> log.error("Произошла ошибка у " + user, e));
+        if (type == InstrumentType.ORDER_BOOK) {
+            subscriptionService.subscribeOrderbook(user.figis(), 20);
+        } else if (type == InstrumentType.CANDLE) {
+            subscriptionService.subscribeCandles(user.figis());
+        } else {
+            subscriptionService.subscribeLastPrices(user.figis());
+        }
     }
 
-    @Cacheable(value = "instrument", cacheManager = "cacheForever")
+    public void unsubscribe(Subscriber subscriber, InstrumentType type) {
+        log.info("Запрос к api об отписке на {} для {}", type, subscriber.user());
+        User user = subscriber.user();
+        if (!streamIdByUser.containsKey(user)) {
+            log.error("Попытка отписаться от потока для пользователя, который не был подписан " + user);
+            return;
+        }
+        MarketDataSubscriptionService subscriptionService = api(user)
+                .getMarketDataStreamService()
+                .getStreamById(streamIdByUser.get(user));
+        if (type == InstrumentType.ORDER_BOOK) {
+            subscriptionService.unsubscribeOrderbook(user.figis(), 20);
+        } else if (type == InstrumentType.CANDLE) {
+            subscriptionService.unsubscribeCandles(user.figis());
+        } else if (type == InstrumentType.LAST_PRICE) {
+            subscriptionService.unsubscribeLastPrices(user.figis());
+        }
+    }
+
+    @Cacheable(value = "portfolio", cacheManager = "cache5s")
+    public CompletableFuture<CachedPortfolio> getPortfolio(User user) {
+        log.info("Запрос к api о портфолио {}", user);
+        if (user.mode() == UserMode.SANDBOX) {
+            CompletableFuture<PortfolioResponse> response = api(user).getSandboxService().getPortfolio(user.accountId());
+            return response.thenApply(CachedPortfolio::of);
+        }
+        if (user.mode() == UserMode.MARKET) {
+            CompletableFuture<Portfolio> response = api(user).getOperationsService().getPortfolio(user.accountId());
+            return response.thenApply(CachedPortfolio::of);
+        }
+        return null;
+    }
+
+    /**
+     * <p>Асинхронно возвращает список операций, отсортированных по дате исполнения, для профиля <code>user</code>,
+     * произведенных по времени в заданном интервале.</p>
+     * <p> Метод кэшируется по полю <code>user</code>, кэш обновляется не чаще, чем раз в 10 секунд. </p>
+     *
+     * @param user профиль
+     * @param from начало периода
+     * @param to   конец периода
+     * @return отсортированный список операций, произведенных в заданном интервале.
+     */
+    @Cacheable(value = "operations", cacheManager = "cache10s", key = "#user")
+    public CompletableFuture<List<Operation>> getOperations(User user, Instant from, Instant to) {
+        log.info("Запрос к api о последних операциях {}", user);
+        CompletableFuture<List<Operation>> operations = CompletableFuture.completedFuture(new ArrayList<>());
+        if (user.mode() == UserMode.SANDBOX) {
+            // Так как в Sandbox режиме нельзя получить все операции разом, то их нужно `склеить`
+            for (String figi : user.figis()) {
+                CompletableFuture<List<Operation>> cur = api(user)
+                        .getSandboxService()
+                        .getOperations(user.accountId(), from, to, OperationState.OPERATION_STATE_EXECUTED, figi);
+                operations = operations.thenCombine(cur, (ops, other) -> {
+                    ops.addAll(other);
+                    return ops;
+                });
+            }
+        } else if (user.mode() == UserMode.MARKET) {
+            operations = api(user).getOperationsService().getAllOperations(user.accountId(), from, to);
+        }
+        return operations.handleAsync((ops, e) -> {
+            if (e != null) {
+                log.error("Ошибка во время получения списка операций", e);
+                return List.of();
+            }
+            ops.sort(Comparator.comparingLong(operation -> operation.getDate().getSeconds()));
+            return ops;
+        });
+    }
+
+    @Cacheable(value = "instrument", cacheManager = "cache1d")
     public Instrument getInstrument(User user, String figi) {
-        return user.api().getInstrumentsService().getInstrumentByFigiSync(figi);
+        log.info("Запрос к api об инструменте {} для {}", figi, user);
+        return api(user).getInstrumentsService().getInstrumentByFigiSync(figi);
+    }
+
+    @Cacheable(value = "5s")
+    public CompletableFuture<BigDecimal> loadLastPrice(User user, String figi) {
+        log.info("Запрос к api о последней цене для {} для {}", figi, user);
+        CompletableFuture<List<LastPrice>> response = api(user).getMarketDataService().getLastPrices(List.of(figi));
+        return response.handleAsync((lastPrices, e) -> {
+            if (e != null) {
+                log.error("Ошибка при получении последней цены", e);
+                return null;
+            }
+            return Utility.toBigDecimal(lastPrices.get(0).getPrice());
+        });
+    }
+
+    public enum InstrumentType {
+        ORDER_BOOK,
+        LAST_PRICE,
+        CANDLE
     }
 }
+
+

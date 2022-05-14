@@ -92,7 +92,7 @@
                 </table>
                 <form th:action="${!frontService.isActive(user)} ? '/strategy/enable' : '/strategy/disable'"
                       method="post">
-                    <input type="hidden" name="userHash" th:value="${user.hashCode()}">
+                    <input type="hidden" name="accountId" th:value="${user.accountId()}">
                     <button th:text="${!frontService.isActive(user)} ? 'Запустить стратегию' : 'Остановить стратегию'"/>
                 </form>
             </div>
