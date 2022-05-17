@@ -235,6 +235,10 @@ public class InvestClient {
         });
     }
 
+    public CompletableFuture<List<Candle>> getCandles(User user, Instant from, Instant to) {
+        return CompletableFuture.completedFuture(null);
+    }
+
     public enum InstrumentType {
         ORDER_BOOK,
         LAST_PRICE,

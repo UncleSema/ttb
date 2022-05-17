@@ -12,7 +12,7 @@ public record Subscriber(ApplicationService service, User user) implements Strea
     public void process(MarketDataResponse response) {
         if (response.hasOrderbook()) {
             log.debug(String.valueOf(response.getOrderbook()));
-            service.addNewOrderBook(response.getOrderbook());
+            service.addOrderBook(response.getOrderbook());
         }
         if (response.hasLastPrice()) {
             log.debug(String.valueOf(response.getLastPrice()));
@@ -20,7 +20,7 @@ public record Subscriber(ApplicationService service, User user) implements Strea
         }
         if (response.hasCandle()) {
             log.debug(String.valueOf(response.getCandle()));
-            service.addCandle();
+            service.addCandle(response.getCandle());
         }
     }
 }

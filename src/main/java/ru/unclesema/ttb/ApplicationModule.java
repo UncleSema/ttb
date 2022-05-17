@@ -6,6 +6,7 @@ import ru.unclesema.ttb.cache.PortfolioStorage;
 import ru.unclesema.ttb.client.InvestClient;
 import ru.unclesema.ttb.strategy.Strategy;
 import ru.unclesema.ttb.strategy.orderbook.OrderBookStrategyImpl;
+import ru.unclesema.ttb.strategy.rsi.RsiStrategy;
 
 import java.util.List;
 
@@ -24,6 +25,6 @@ public class ApplicationModule {
 
     @Bean
     public List<Strategy> availableStrategies() {
-        return List.of(new OrderBookStrategyImpl());
+        return List.of(new OrderBookStrategyImpl(), new RsiStrategy());
     }
 }

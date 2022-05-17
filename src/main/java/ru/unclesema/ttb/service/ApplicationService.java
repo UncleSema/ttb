@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import ru.tinkoff.piapi.contract.v1.Candle;
 import ru.tinkoff.piapi.contract.v1.LastPrice;
 import ru.tinkoff.piapi.contract.v1.OrderBook;
 import ru.tinkoff.piapi.contract.v1.OrderDirection;
@@ -16,8 +17,10 @@ import ru.unclesema.ttb.strategy.CandleStrategy;
 import ru.unclesema.ttb.strategy.OrderBookStrategy;
 import ru.unclesema.ttb.strategy.Strategy;
 import ru.unclesema.ttb.strategy.StrategyDecision;
+import ru.unclesema.ttb.utility.Utility;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -38,10 +41,6 @@ public class ApplicationService {
     private static final ObjectMapper objectMapper = new ObjectMapper();
     private LocalDateTime lastBought = null;
     private static final long OPERATIONS_PERIOD_SECONDS = 30;
-
-    public void addLastPrice(LastPrice lastPrice) {
-        priceService.addLastPrice(lastPrice);
-    }
 
     public User addNewUser(NewUserRequest request) {
         Map<String, String> strategyParameters = request.getStrategyParameters();
@@ -71,46 +70,58 @@ public class ApplicationService {
         return user;
     }
 
-    public void addNewOrderBook(OrderBook orderBook) {
+    public void addOrderBook(OrderBook orderBook) {
         for (User user : activeOrderBookUsers) {
             OrderBookStrategy strategy = (OrderBookStrategy) user.strategy();
             String figi = orderBook.getFigi();
             StrategyDecision decision = strategy.addOrderBook(orderBook);
-            if (decision == StrategyDecision.BUY) {
-                BigDecimal profit = BigDecimal.valueOf(strategy.getTakeProfit() / 100 + 1);
-                BigDecimal loss = BigDecimal.valueOf(1 - strategy.getStopLoss() / 100);
-                BigDecimal currentPrice = priceService.getLastPrice(user, figi);
-                BigDecimal takeProfit = currentPrice.multiply(profit);
-                BigDecimal stopLoss = currentPrice.multiply(loss);
-                LocalDateTime now = LocalDateTime.now();
-                log.info("Стратегия собирается пойти в лонг по бумаге с figi {}.\nЦена покупки: {}.\nTakeProfit: {}.\nStopLoss: {}",
-                        figi, currentPrice, takeProfit, stopLoss);
-                if ((lastBought == null || lastBought.plusSeconds(OPERATIONS_PERIOD_SECONDS).isBefore(now))) {
-                    investClient.buyMarket(user, figi, currentPrice).thenAcceptAsync(response -> {
-                        if (response != null) {
-                            priceService.addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, OrderDirection.ORDER_DIRECTION_SELL));
-                            lastBought = now;
-                        }
-                    });
-                }
-            } else if (decision == StrategyDecision.SELL && investClient.getInstrument(user, figi).getShortEnabledFlag()) {
-                BigDecimal profit = BigDecimal.valueOf(1 - strategy.getTakeProfit() / 100);
-                BigDecimal loss = BigDecimal.valueOf(1 + strategy.getStopLoss() / 100);
-                BigDecimal currentPrice = priceService.getLastPrice(user, figi);
-                BigDecimal takeProfit = currentPrice.multiply(profit);
-                BigDecimal stopLoss = currentPrice.multiply(loss);
-                log.info("Стратегия собирается пойти в шорт по бумаге с figi {}.\nЦена покупки: {}.\nTakeProfit: {}.\nStopLoss: {}",
-                        figi, currentPrice, takeProfit, stopLoss);
-                LocalDateTime now = LocalDateTime.now();
-                if ((lastBought == null || lastBought.plusSeconds(OPERATIONS_PERIOD_SECONDS).isBefore(now))) {
-                    investClient.sellMarket(user, figi, priceService.getLastPrice(user, figi)).thenAcceptAsync(response -> {
-                        if (response != null) {
-                            priceService.addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, OrderDirection.ORDER_DIRECTION_BUY));
-                            lastBought = now;
-                        }
-                    });
-                }
-            }
+            processStrategyDecision(user, figi, priceService.getLastPrice(user, figi), decision);
+        }
+    }
+
+    public void addCandle(Candle candle) {
+        for (User user : activeCandleUsers) {
+            CandleStrategy strategy = (CandleStrategy) user.strategy();
+            String figi = candle.getFigi();
+            StrategyDecision decision = strategy.addCandle(candle);
+            processStrategyDecision(user, figi, priceService.getLastPrice(user, figi), decision);
+        }
+    }
+
+    public void simulate(User user, Instant from, Instant to) {
+        List<Candle> candles = investClient.getCandles(user, from, to).join();
+        if (!(user.strategy() instanceof CandleStrategy strategy)) {
+            throw new UnsupportedOperationException("Чтобы просимулировать на исторических данных работу стратегии, она должна реализовывать CandleStrategy интерфейс");
+        }
+        for (Candle candle : candles) {
+            StrategyDecision decision = strategy.addCandle(candle);
+            String figi = candle.getFigi();
+            processStrategyDecision(user, figi, Utility.toBigDecimal(candle.getClose()), decision);
+        }
+    }
+
+    private void processStrategyDecision(User user, String figi, BigDecimal currentPrice, StrategyDecision decision) {
+        if (decision == StrategyDecision.NOTHING) return;
+        boolean isBuy = decision == StrategyDecision.BUY;
+        BigDecimal profit = BigDecimal.valueOf(1 + (isBuy ? 1 : -1) * user.strategy().getTakeProfit() / 100);
+        BigDecimal loss = BigDecimal.valueOf(1 - (isBuy ? 1 : -1) * user.strategy().getStopLoss() / 100);
+        BigDecimal takeProfit = currentPrice.multiply(profit);
+        BigDecimal stopLoss = currentPrice.multiply(loss);
+        LocalDateTime now = LocalDateTime.now();
+        if (isBuy && canMakeOperationNow()) {
+            log.info("Стратегия собирается пойти в лонг по бумаге с figi {}.\nЦена покупки: {}.\nTakeProfit: {}.\nStopLoss: {}",
+                    figi, currentPrice, takeProfit, stopLoss);
+            investClient.buyMarket(user, figi, currentPrice).thenAcceptAsync(response -> {
+                priceService.addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, OrderDirection.ORDER_DIRECTION_SELL));
+                lastBought = now;
+            });
+        } else if (!isBuy && investClient.getInstrument(user, figi).getShortEnabledFlag() && canMakeOperationNow()) {
+            log.info("Стратегия собирается пойти в шорт по бумаге с figi {}.\nЦена покупки: {}.\nTakeProfit: {}.\nStopLoss: {}",
+                    figi, currentPrice, takeProfit, stopLoss);
+            investClient.sellMarket(user, figi, currentPrice).thenAcceptAsync(response -> {
+                priceService.addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, OrderDirection.ORDER_DIRECTION_BUY));
+                lastBought = now;
+            });
         }
     }
 
@@ -169,7 +180,11 @@ public class ApplicationService {
         return activeCandleUsers.contains(user) || activeOrderBookUsers.contains(user);
     }
 
-    public void addCandle() {
+    public void addLastPrice(LastPrice lastPrice) {
+        priceService.addLastPrice(lastPrice);
+    }
 
+    private boolean canMakeOperationNow() {
+        return (lastBought == null || lastBought.plusSeconds(OPERATIONS_PERIOD_SECONDS).isBefore(LocalDateTime.now()));
     }
 }
