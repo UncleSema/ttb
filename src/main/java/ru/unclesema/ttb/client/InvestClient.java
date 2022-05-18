@@ -4,6 +4,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import ru.tinkoff.piapi.contract.v1.*;
+import ru.tinkoff.piapi.contract.v1.Currency;
 import ru.tinkoff.piapi.core.InvestApi;
 import ru.tinkoff.piapi.core.models.Portfolio;
 import ru.tinkoff.piapi.core.stream.MarketDataSubscriptionService;
@@ -22,8 +23,11 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 public class InvestClient {
     private static final String APP_NAME = "ru.unclesema.ttb";
+    private static final Instant appStartTime = Instant.now();
     private final Map<User, String> streamIdByUser = new HashMap<>();
     private final Map<String, InvestApi> apiByToken = new HashMap<>();
+    private final Map<User, BigDecimal> spent = new HashMap<>();
+
 
     public String addSandboxUser(String token) {
         InvestApi api = InvestApi.createSandbox(token, APP_NAME);
@@ -235,8 +239,59 @@ public class InvestClient {
         });
     }
 
+    @Cacheable(value = "forever")
+    public List<Currency> loadAllCurrencies(User user) {
+        return api(user).getInstrumentsService().getAllCurrenciesSync();
+    }
+
     public CompletableFuture<List<Candle>> getCandles(User user, Instant from, Instant to) {
         return CompletableFuture.completedFuture(null);
+    }
+
+    public BigDecimal getBalance(User user) {
+        return getPortfolio(user).join().totalAmountCurrencies().getValue().negate();
+    }
+
+    public void addToBalance(User user, BigDecimal price, String currency) {
+        spent.merge(user, getPriceInRubles(user, price, currency), BigDecimal::add);
+    }
+
+    public void subtractToBalance(User user, BigDecimal price, String currency) {
+        spent.merge(user, getPriceInRubles(user, price, currency), BigDecimal::subtract);
+    }
+
+    public BigDecimal getPriceInRubles(User user, BigDecimal price, String currency) {
+        if (currency.equalsIgnoreCase("rub")) {
+            return price;
+        }
+        Optional<Currency> optionalCurrency = loadAllCurrencies(user).stream().filter(c -> c.getIsoCurrencyName().equalsIgnoreCase(currency)).findAny();
+        if (optionalCurrency.isEmpty()) {
+            throw new IllegalArgumentException("Не получается найти валюту " + currency);
+        }
+        BigDecimal lastCurrencyPrice = loadLastPrice(user, optionalCurrency.get().getFigi()).join();
+        return lastCurrencyPrice.multiply(price);
+    }
+
+    public Map<Instrument, Long> getRemainingInstruments(User user) {
+        List<Operation> operations = getOperations(user, appStartTime, Instant.now()).join();
+        Map<Instrument, Long> remainingInstruments = new HashMap<>();
+        for (Operation op : operations) {
+            if (op.getInstrumentType().equalsIgnoreCase("currency")) continue;
+            Instrument instrument = getInstrument(user, op.getFigi());
+            if (op.getOperationType() == OperationType.OPERATION_TYPE_BUY) {
+                remainingInstruments.merge(instrument, op.getQuantity(), Long::sum);
+            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_SELL) {
+                Long cur = remainingInstruments.getOrDefault(instrument, 0L);
+                if (cur == op.getQuantity()) {
+                    remainingInstruments.remove(instrument);
+                } else {
+                    remainingInstruments.put(instrument, cur - op.getQuantity());
+                }
+            } else {
+                log.error("Неизвестный тип операции: {}", op);
+            }
+        }
+        return remainingInstruments;
     }
 
     public enum InstrumentType {

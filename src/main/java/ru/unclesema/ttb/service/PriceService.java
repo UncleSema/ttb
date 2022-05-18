@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.tinkoff.piapi.contract.v1.LastPrice;
 import ru.tinkoff.piapi.contract.v1.OrderDirection;
+import ru.tinkoff.piapi.contract.v1.PostOrderResponse;
 import ru.unclesema.ttb.User;
 import ru.unclesema.ttb.client.InvestClient;
 import ru.unclesema.ttb.utility.Utility;
@@ -61,7 +62,11 @@ public class PriceService {
                     return false;
                 }
                 log.info("Сработала стоп-заяка для {}, продажа по цене {}", price.getFigi(), sellPrice);
-                return client.sellMarket(request.user(), request.figi(), sellPrice).join() != null;
+                PostOrderResponse response = client.sellMarket(request.user(), request.figi(), sellPrice).join();
+                if (response != null) {
+                    client.subtractToBalance(request.user(), sellPrice, client.getInstrument(request.user(), request.figi()).getCurrency());
+                }
+                return response != null;
             } else if (request.direction() == OrderDirection.ORDER_DIRECTION_BUY) {
                 BigDecimal buyPrice;
                 if (request.takeProfit().compareTo(lastPrice) >= 0) {

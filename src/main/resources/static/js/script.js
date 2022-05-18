@@ -46,4 +46,16 @@ function onSelectChanged(e) {
     document.getElementById(e.value).style.display = "block"
 }
 
-document.addEventListener("DOMContentLoaded", (_) => addFigiField())
+let selectedPage = ""
+
+function onChangePage(name) {
+    document.getElementById(selectedPage).style.display = "none"
+    selectedPage = "page-" + name
+    document.getElementById(selectedPage).style.display = "block"
+}
+
+document.addEventListener("DOMContentLoaded", (_) => {
+    addFigiField()
+    selectedPage = (document.getElementById("page-0") == null ? "page-add" : "page-0")
+    document.getElementById(selectedPage).style.display = "block"
+})

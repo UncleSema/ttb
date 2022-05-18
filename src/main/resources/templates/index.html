@@ -12,20 +12,20 @@
 <body>
 <aside>
     <th:block th:each="user, iStat : ${frontService.getAllUsers()}">
-        <a th:href="'#page-' + ${iStat.index}" th:text="${iStat.index}+1"></a>
+        <a th:onclick="'onChangePage(' + ${iStat.index} + ')'" th:text="${iStat.index}+1"/>
     </th:block>
-    <a href="#add">+</a>
+    <a id="a-add" onclick="onChangePage('add')">+</a>
 </aside>
 <main>
     <th:block th:each="user, iStat : ${frontService.getAllUsers()}">
-        <div class="page" th:id="'page-'+${iStat.index}">
+        <div class="page" th:id="'page-'+${iStat.index}" style="display: none">
             <div class="card">
                 <h4>Пользователь</h4>
                 <p th:text="'Аккаунт ID: ' + ${user.accountId()}"></p>
                 <table>
                     <tr>
-                        <th>Название</th>
                         <th>Figi</th>
+                        <th>Название</th>
                         <th>Валюта</th>
                     </tr>
                     <tr th:each="figi : ${user.figis()}">
@@ -74,6 +74,7 @@
             <div class="card">
                 <h4> Текущие результаты стратегии </h4>
                 <p th:text="'Заработано: ' + ${frontService.printBenefits(user)}"/>
+                <p th:text="'Стоимость портфеля: ' + ${frontService.getBalance(user).doubleValue()} + ' RUB'"/>
                 <table>
                     <tr>
                         <th>Название</th>
@@ -98,7 +99,7 @@
             </div>
         </div>
     </th:block>
-    <div class="page" id="add">
+    <div class="page" id="page-add" style="display:none">
         <div class="card">
             <h4>Новый пользователь</h4>
             <p>Заполните поля ниже, чтобы настроить нового пользователя и бота для него.</p>
@@ -114,14 +115,15 @@
                 <label>
                     <span>Выберите режим:</span>
                     <br>
-                    <select th:field="*{mode}">
-                        <option value="SANDBOX">Песочница</option>
+                    <select th:field="*{mode}"
+                            onchange="document.getElementById('accountIdField').style.display=(value === 'MARKET' ? 'block' : 'none')">
+                        <option value="SANDBOX" selected>Песочница</option>
                         <option value="MARKET">Биржа</option>
                         <option value="ANALYZE">Анализ</option>
                     </select>
                 </label>
-                <label>
-                    <span>Введите Id аккаунта (или оставьте пустым, чтобы создать новый):</span>
+                <label style="display: none" id="accountIdField">
+                    <span>Введите Id аккаунта:</span>
                     <br>
                     <input type="text" th:field="*{accountId}">
                 </label>

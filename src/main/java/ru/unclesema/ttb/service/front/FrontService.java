@@ -7,8 +7,10 @@ import ru.tinkoff.piapi.contract.v1.Instrument;
 import ru.tinkoff.piapi.contract.v1.MoneyValue;
 import ru.tinkoff.piapi.contract.v1.Operation;
 import ru.tinkoff.piapi.contract.v1.OperationType;
+import ru.tinkoff.piapi.core.models.Portfolio;
 import ru.unclesema.ttb.User;
 import ru.unclesema.ttb.client.InvestClient;
+import ru.unclesema.ttb.model.CachedPortfolio;
 import ru.unclesema.ttb.service.ApplicationService;
 import ru.unclesema.ttb.service.PriceService;
 import ru.unclesema.ttb.service.UserService;
@@ -51,28 +53,6 @@ public class FrontService {
         return investClient.getInstrument(user, figi);
     }
 
-    public Map<Instrument, Long> getRemainingInstruments(User user) {
-        List<Operation> operations = getOperations(user);
-        Map<Instrument, Long> remainingInstruments = new HashMap<>();
-        for (Operation op : operations) {
-            if (op.getInstrumentType().equalsIgnoreCase("currency")) continue;
-            Instrument instrument = getInstrument(user, op.getFigi());
-            if (op.getOperationType() == OperationType.OPERATION_TYPE_BUY) {
-                remainingInstruments.merge(instrument, op.getQuantity(), Long::sum);
-            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_SELL) {
-                Long cur = remainingInstruments.getOrDefault(instrument, 0L);
-                if (cur == op.getQuantity()) {
-                    remainingInstruments.remove(instrument);
-                } else {
-                    remainingInstruments.put(instrument, cur - op.getQuantity());
-                }
-            } else {
-                log.error("Неизвестный тип операции: {}", op);
-            }
-        }
-        return remainingInstruments;
-    }
-
 
     public String lastPriceToString(User user, BigDecimal quantity, String figi) {
         if (figi.equalsIgnoreCase("FG0000000000")) {
@@ -90,7 +70,7 @@ public class FrontService {
 
     public StrategyStatement getStatement(User user) {
         Map<String, BigDecimal> benefitByCurrency = new HashMap<>();
-        for (Map.Entry<Instrument, Long> entry : getRemainingInstruments(user).entrySet()) {
+        for (Map.Entry<Instrument, Long> entry : investClient.getRemainingInstruments(user).entrySet()) {
             Instrument instrument = entry.getKey();
             Long amount = entry.getValue();
             BigDecimal benefit = benefitByCurrency.getOrDefault(instrument.getCurrency(), BigDecimal.ZERO);
@@ -155,7 +135,15 @@ public class FrontService {
         return investClient.getOperations(user, appStartTime, Instant.now()).join();
     }
 
+    public BigDecimal getBalance(User user) {
+        return investClient.getBalance(user);
+    }
+
     public LocalDateTime getDate(Operation op) {
         return LocalDateTime.ofInstant(Utility.toInstant(op.getDate()), ZoneId.systemDefault());
+    }
+
+    public Map<Instrument, Long> getRemainingInstruments(User user) {
+        return investClient.getRemainingInstruments(user);
     }
 }

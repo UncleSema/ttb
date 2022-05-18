@@ -4,10 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import ru.tinkoff.piapi.contract.v1.Candle;
-import ru.tinkoff.piapi.contract.v1.LastPrice;
-import ru.tinkoff.piapi.contract.v1.OrderBook;
-import ru.tinkoff.piapi.contract.v1.OrderDirection;
+import ru.tinkoff.piapi.contract.v1.*;
+import ru.tinkoff.piapi.contract.v1.Currency;
 import ru.unclesema.ttb.NewUserRequest;
 import ru.unclesema.ttb.Subscriber;
 import ru.unclesema.ttb.User;
@@ -108,14 +106,16 @@ public class ApplicationService {
         BigDecimal takeProfit = currentPrice.multiply(profit);
         BigDecimal stopLoss = currentPrice.multiply(loss);
         LocalDateTime now = LocalDateTime.now();
-        if (isBuy && canMakeOperationNow()) {
+        Instrument instrument = investClient.getInstrument(user, figi);
+        if (isBuy && canMakeOperationNow(user, currentPrice, instrument.getCurrency())) {
             log.info("Стратегия собирается пойти в лонг по бумаге с figi {}.\nЦена покупки: {}.\nTakeProfit: {}.\nStopLoss: {}",
                     figi, currentPrice, takeProfit, stopLoss);
             investClient.buyMarket(user, figi, currentPrice).thenAcceptAsync(response -> {
                 priceService.addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, OrderDirection.ORDER_DIRECTION_SELL));
                 lastBought = now;
+                investClient.addToBalance(user, currentPrice, instrument.getCurrency());
             });
-        } else if (!isBuy && investClient.getInstrument(user, figi).getShortEnabledFlag() && canMakeOperationNow()) {
+        } else if (!isBuy && instrument.getShortEnabledFlag() && canMakeOperationNow(user, currentPrice, instrument.getCurrency())) {
             log.info("Стратегия собирается пойти в шорт по бумаге с figi {}.\nЦена покупки: {}.\nTakeProfit: {}.\nStopLoss: {}",
                     figi, currentPrice, takeProfit, stopLoss);
             investClient.sellMarket(user, figi, currentPrice).thenAcceptAsync(response -> {
@@ -184,7 +184,14 @@ public class ApplicationService {
         priceService.addLastPrice(lastPrice);
     }
 
-    private boolean canMakeOperationNow() {
+    private boolean canMakeOperationNow(User user, BigDecimal price, String currency) {
+        BigDecimal alreadySpent = investClient.getBalance(user);
+        BigDecimal priceInRubles = investClient.getPriceInRubles(user, price, currency);
+        BigDecimal newBalance = alreadySpent.add(priceInRubles);
+        if (newBalance.compareTo(user.maxBalance()) > 0) {
+            log.warn("Недостаточно средств для операции, требуется {} RUB, а осталось {} RUB", priceInRubles, user.maxBalance().subtract(alreadySpent));
+            return false;
+        }
         return (lastBought == null || lastBought.plusSeconds(OPERATIONS_PERIOD_SECONDS).isBefore(LocalDateTime.now()));
     }
 }
