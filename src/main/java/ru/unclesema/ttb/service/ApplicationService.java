@@ -3,6 +3,7 @@ package ru.unclesema.ttb.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import ru.tinkoff.piapi.contract.v1.*;
 import ru.tinkoff.piapi.contract.v1.Currency;
@@ -113,7 +114,7 @@ public class ApplicationService {
             investClient.buyMarket(user, figi, currentPrice).thenAcceptAsync(response -> {
                 priceService.addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, OrderDirection.ORDER_DIRECTION_SELL));
                 lastBought = now;
-                investClient.addToBalance(user, currentPrice, instrument.getCurrency());
+                investClient.addToBalance(user, getPriceInRubles(user, currentPrice, instrument.getCurrency()));
             });
         } else if (!isBuy && instrument.getShortEnabledFlag() && canMakeOperationNow(user, currentPrice, instrument.getCurrency())) {
             log.info("Стратегия собирается пойти в шорт по бумаге с figi {}.\nЦена покупки: {}.\nTakeProfit: {}.\nStopLoss: {}",
@@ -185,13 +186,42 @@ public class ApplicationService {
     }
 
     private boolean canMakeOperationNow(User user, BigDecimal price, String currency) {
-        BigDecimal alreadySpent = investClient.getBalance(user);
-        BigDecimal priceInRubles = investClient.getPriceInRubles(user, price, currency);
-        BigDecimal newBalance = alreadySpent.add(priceInRubles);
+        var alreadySpent = investClient.getBalance(user);
+        var priceInRubles = getPriceInRubles(user, price, currency);
+        var newBalance = alreadySpent.add(priceInRubles);
         if (newBalance.compareTo(user.maxBalance()) > 0) {
             log.warn("Недостаточно средств для операции, требуется {} RUB, а осталось {} RUB", priceInRubles, user.maxBalance().subtract(alreadySpent));
             return false;
         }
         return (lastBought == null || lastBought.plusSeconds(OPERATIONS_PERIOD_SECONDS).isBefore(LocalDateTime.now()));
+    }
+
+    @CacheEvict("operations")
+    public void sellAll(String accountId) {
+        log.info("Запрос на продажу всех активов {}", accountId);
+        var optionalUser = userService.getAllUsers().stream().filter(u -> u.accountId().equals(accountId)).findAny();
+        if (optionalUser.isEmpty()) {
+            throw new IllegalArgumentException("Не получилось найти пользователя с accountId = " + accountId);
+        }
+        var user = optionalUser.get();
+        priceService.deleteRequestsForUser(user);
+        investClient.getPortfolio(user).join().positions().forEach(position -> {
+                    if (!position.figi().equalsIgnoreCase("FG0000000000") && !investClient.getInstrument(user, position.figi()).getInstrumentType().equalsIgnoreCase("currency")) {
+                        investClient.sellMarket(user, position.figi(), priceService.getLastPrice(user, position.figi())).join();
+                    }
+                }
+        );
+    }
+
+    public BigDecimal getPriceInRubles(User user, BigDecimal price, String currency) {
+        if (currency.equalsIgnoreCase("rub")) {
+            return price;
+        }
+        Optional<Currency> optionalCurrency = investClient.loadAllCurrencies(user).stream().filter(c -> c.getIsoCurrencyName().equalsIgnoreCase(currency)).findAny();
+        if (optionalCurrency.isEmpty()) {
+            throw new IllegalArgumentException("Не получается найти валюту " + currency);
+        }
+        BigDecimal lastCurrencyPrice = priceService.getLastPrice(user, optionalCurrency.get().getFigi());
+        return lastCurrencyPrice.multiply(price);
     }
 }

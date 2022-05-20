@@ -60,9 +60,16 @@ public class ApplicationController {
         return "redirect:/";
     }
 
+    @PostMapping("/sell-all")
+    public String sellAll(String accountId) {
+        service.sellAll(accountId);
+        return "redirect:/";
+    }
+
     @GetMapping("/app-error")
     public String exceptionHandler(Model model, Exception e) {
         model.addAttribute("msg", e.getMessage());
         return "error-page";
     }
+
 }

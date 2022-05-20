@@ -64,7 +64,7 @@ public class PriceService {
                 log.info("Сработала стоп-заяка для {}, продажа по цене {}", price.getFigi(), sellPrice);
                 PostOrderResponse response = client.sellMarket(request.user(), request.figi(), sellPrice).join();
                 if (response != null) {
-                    client.subtractToBalance(request.user(), sellPrice, client.getInstrument(request.user(), request.figi()).getCurrency());
+//                    client.subtractToBalance(request.user(), sellPrice, client.getInstrument(request.user(), request.figi()).getCurrency());
                 }
                 return response != null;
             } else if (request.direction() == OrderDirection.ORDER_DIRECTION_BUY) {
@@ -81,6 +81,16 @@ public class PriceService {
             }
             return false;
         });
+    }
+
+    public void deleteRequestsForUser(User user) {
+        for (String figi : user.figis()) {
+            if (!openStopRequests.containsKey(figi)) {
+                continue;
+            }
+            var requests = openStopRequests.get(figi);
+            requests.removeIf(r -> r.user().equals(user));
+        }
     }
 }
 

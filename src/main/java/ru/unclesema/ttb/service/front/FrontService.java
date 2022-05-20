@@ -7,10 +7,8 @@ import ru.tinkoff.piapi.contract.v1.Instrument;
 import ru.tinkoff.piapi.contract.v1.MoneyValue;
 import ru.tinkoff.piapi.contract.v1.Operation;
 import ru.tinkoff.piapi.contract.v1.OperationType;
-import ru.tinkoff.piapi.core.models.Portfolio;
 import ru.unclesema.ttb.User;
 import ru.unclesema.ttb.client.InvestClient;
-import ru.unclesema.ttb.model.CachedPortfolio;
 import ru.unclesema.ttb.service.ApplicationService;
 import ru.unclesema.ttb.service.PriceService;
 import ru.unclesema.ttb.service.UserService;
@@ -65,12 +63,12 @@ public class FrontService {
 
     public String moneyValueToString(User user, String figi, MoneyValue value) {
         Instrument instrument = getInstrument(user, figi);
-        return value.getUnits() + "." + value.getNano() / 1_000_000 + " " + instrument.getCurrency().toUpperCase();
+        return Utility.toBigDecimal(value).doubleValue() + " " + instrument.getCurrency().toUpperCase();
     }
 
     public StrategyStatement getStatement(User user) {
         Map<String, BigDecimal> benefitByCurrency = new HashMap<>();
-        for (Map.Entry<Instrument, Long> entry : investClient.getRemainingInstruments(user).entrySet()) {
+        for (Map.Entry<Instrument, Long> entry : getRemainingInstruments(user).entrySet()) {
             Instrument instrument = entry.getKey();
             Long amount = entry.getValue();
             BigDecimal benefit = benefitByCurrency.getOrDefault(instrument.getCurrency(), BigDecimal.ZERO);
@@ -82,13 +80,13 @@ public class FrontService {
             if (op.getInstrumentType().equalsIgnoreCase("currency")) continue;
             Instrument instrument = getInstrument(user, op.getFigi());
             BigDecimal benefit = benefitByCurrency.getOrDefault(instrument.getCurrency(), BigDecimal.ZERO);
-            BigDecimal payment = Utility.toBigDecimal(op.getPayment().getUnits(), op.getPayment().getNano());
+            BigDecimal payment = Utility.toBigDecimal(op.getPayment());
             if (op.getOperationType() == OperationType.OPERATION_TYPE_SELL) {
                 benefit = benefit.add(payment);
             } else if (op.getOperationType() == OperationType.OPERATION_TYPE_BUY) {
                 benefit = benefit.subtract(payment);
-            } else {
-                log.error("Неизвестный тип операции: {}", op);
+            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_BROKER_FEE) {
+                benefit = benefit.subtract(payment);
             }
             benefitByCurrency.put(instrument.getCurrency(), benefit);
         }
@@ -120,6 +118,9 @@ public class FrontService {
         if (operationType == OperationType.OPERATION_TYPE_OUTPUT) {
             return "Снятие";
         }
+        if (operationType == OperationType.OPERATION_TYPE_BROKER_FEE) {
+            return "Комиссия брокера";
+        }
         return operationType.name();
     }
 
@@ -144,6 +145,26 @@ public class FrontService {
     }
 
     public Map<Instrument, Long> getRemainingInstruments(User user) {
-        return investClient.getRemainingInstruments(user);
+        List<Operation> operations = getOperations(user);
+        Map<Instrument, Long> remainingInstruments = new HashMap<>();
+        for (Operation op : operations) {
+            if (op.getInstrumentType().equalsIgnoreCase("currency")) continue;
+            Instrument instrument = getInstrument(user, op.getFigi());
+            if (op.getOperationType() == OperationType.OPERATION_TYPE_BUY) {
+                remainingInstruments.merge(instrument, op.getQuantity(), Long::sum);
+            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_SELL) {
+                Long cur = remainingInstruments.getOrDefault(instrument, 0L);
+                if (cur == op.getQuantity()) {
+                    remainingInstruments.remove(instrument);
+                } else {
+                    remainingInstruments.put(instrument, cur - op.getQuantity());
+                }
+            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_BROKER_FEE) {
+
+            } else {
+                log.error("Неизвестный тип операции: {}", op);
+            }
+        }
+        return remainingInstruments;
     }
 }

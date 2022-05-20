@@ -1,6 +1,7 @@
 package ru.unclesema.ttb.utility;
 
 import com.google.protobuf.Timestamp;
+import ru.tinkoff.piapi.contract.v1.MoneyValue;
 import ru.tinkoff.piapi.contract.v1.Quotation;
 
 import java.math.BigDecimal;
@@ -20,6 +21,10 @@ public class Utility {
 
     public static BigDecimal toBigDecimal(Quotation quotation) {
         return toBigDecimal(quotation.getUnits(), quotation.getNano());
+    }
+
+    public static BigDecimal toBigDecimal(MoneyValue value) {
+        return toBigDecimal(value.getUnits(), value.getNano());
     }
 
     public static BigDecimal toBigDecimal(long units, int nanos) {

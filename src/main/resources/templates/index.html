@@ -91,6 +91,10 @@
                         <td th:text="${frontService.moneyValueToString(user, operation.figi, operation.getPayment())}"/>
                     </tr>
                 </table>
+                <form action="/sell-all" method="post">
+                    <input type="hidden" name="accountId" th:value="${user.accountId()}">
+                    <button>Продать всё</button>
+                </form>
                 <form th:action="${!frontService.isActive(user)} ? '/strategy/enable' : '/strategy/disable'"
                       method="post">
                     <input type="hidden" name="accountId" th:value="${user.accountId()}">
