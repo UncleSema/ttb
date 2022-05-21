@@ -37,17 +37,8 @@ main {
     width: 100%;
     height: 100%;
     background-color: #fafafa;
-    display: none;
     min-height: 100vh;
     overflow: auto;
-}
-
-main > div:first-of-type {
-    display: block;
-}
-
-.page:target {
-    display: block;
 }
 
 .card {
@@ -80,16 +71,12 @@ button {
     padding: 5px;
 }
 
-#token-copy {
-    cursor: copy;
-}
-
-#token-copy:hover #copy-tip {
+.tooltip:hover .tip {
     visibility: visible;
     opacity: 1;
 }
 
-#copy-tip {
+.tooltip .tip {
     visibility: hidden;
     width: 140px;
     background-color: #555;
@@ -111,7 +98,7 @@ button {
     display: inline-block;
 }
 
-.tooltip #copy-tip::after {
+.tooltip .tip::after {
     content: "";
     position: absolute;
     top: 100%;

@@ -7,7 +7,8 @@ import ru.tinkoff.piapi.contract.v1.Currency;
 import ru.tinkoff.piapi.contract.v1.*;
 import ru.tinkoff.piapi.core.InvestApi;
 import ru.tinkoff.piapi.core.models.Portfolio;
-import ru.unclesema.ttb.Subscriber;
+import ru.tinkoff.piapi.core.stream.StreamProcessor;
+import ru.unclesema.ttb.MarketSubscriber;
 import ru.unclesema.ttb.User;
 import ru.unclesema.ttb.UserMode;
 import ru.unclesema.ttb.model.CachedPortfolio;
@@ -25,7 +26,6 @@ public class InvestClient {
     private final Map<User, String> streamIdByUser = new HashMap<>();
     private final Map<String, InvestApi> apiByToken = new HashMap<>();
     private final Map<User, BigDecimal> spent = new HashMap<>();
-
 
     public String addSandboxUser(String token) {
         var api = InvestApi.createSandbox(token, APP_NAME);
@@ -86,6 +86,7 @@ public class InvestClient {
                     }
             );
         } else {
+            log.info("Запрос на покупку {} по рыночной цене.", figi);
             var response = api(user).getOrdersService().postOrder(
                     figi,
                     1,
@@ -98,13 +99,7 @@ public class InvestClient {
             return response.exceptionally(e -> {
                 log.error("Ошибка при запросе на покупку", e);
                 return null;
-            }).thenApply(r -> {
-                        if (r != null) {
-                            spent.merge(user, price, BigDecimal::add);
-                        }
-                        return r;
-                    }
-            );
+            });
         }
     }
 
@@ -126,12 +121,12 @@ public class InvestClient {
         return true;
     }
 
-    public CompletableFuture<PostOrderResponse> sellMarket(User user, String figi, BigDecimal price) {
+    public CompletableFuture<PostOrderResponse> sellMarket(User user, String figi, long quantity, BigDecimal price) {
         if (user.mode() == UserMode.SANDBOX) {
             log.info("Запрос на продажу {} по рыночной цене.", figi);
             var response = api(user).getSandboxService().postOrder(
                     figi,
-                    1,
+                    quantity,
                     Utility.toQuotation(price),
                     OrderDirection.ORDER_DIRECTION_SELL,
                     user.accountId(),
@@ -141,17 +136,12 @@ public class InvestClient {
             return response.exceptionally(e -> {
                 log.error("Ошибка при запросе на продажу", e);
                 return null;
-            }).thenApply(r -> {
-                if (r != null) {
-                    spent.merge(user, price, BigDecimal::subtract); // TODO умножить на ст валюты
-                }
-                return r;
             });
         } else {
             log.info("Запрос на продажу {} по рыночной цене.", figi);
             var response = api(user).getOrdersService().postOrder(
                     figi,
-                    1,
+                    quantity,
                     Utility.toQuotation(price),
                     OrderDirection.ORDER_DIRECTION_SELL,
                     user.accountId(),
@@ -161,18 +151,17 @@ public class InvestClient {
             return response.exceptionally(e -> {
                 log.error("Ошибка при запросе на продажу", e);
                 return null;
-            }).thenApply(r -> {
-                if (r != null) {
-                    spent.merge(user, price, BigDecimal::subtract);
-                }
-                return r;
             });
         }
     }
 
-    public void subscribe(Subscriber subscriber, InstrumentType type) {
-        log.info("Запрос к api о подписке на {} для {}", type, subscriber.user());
-        var user = subscriber.user();
+    public CompletableFuture<PostOrderResponse> sellMarket(User user, String figi, BigDecimal price) {
+        return sellMarket(user, figi, 1, price);
+    }
+
+    public void subscribeMarket(MarketSubscriber marketSubscriber, InstrumentType type) {
+        log.info("Запрос к api о подписке на {} для {}", type, marketSubscriber.user());
+        var user = marketSubscriber.user();
         var streamId = "";
         if (streamIdByUser.containsKey(user)) {
             streamId = streamIdByUser.get(user);
@@ -182,7 +171,7 @@ public class InvestClient {
         }
         var subscriptionService = api(user)
                 .getMarketDataStreamService()
-                .newStream(streamId, subscriber, e -> log.error("Произошла ошибка у " + user, e));
+                .newStream(streamId, marketSubscriber, e -> log.error("Произошла ошибка у " + user, e));
         if (type == InstrumentType.ORDER_BOOK) {
             subscriptionService.subscribeOrderbook(user.figis(), 20);
         } else if (type == InstrumentType.CANDLE) {
@@ -192,7 +181,15 @@ public class InvestClient {
         }
     }
 
-    public void unsubscribe(Subscriber subscriber, InstrumentType type) {
+    public void subscribeTrades(User user, StreamProcessor<TradesStreamResponse> processor) {
+        if (user.mode() == UserMode.MARKET) {
+            api(user)
+                    .getOrdersStreamService()
+                    .subscribeTrades(processor, e -> log.error("Произошла ошибка у " + user, e), List.of(user.accountId()));
+        }
+    }
+
+    public void unsubscribe(MarketSubscriber subscriber, InstrumentType type) {
         log.info("Запрос к api об отписке на {} для {}", type, subscriber.user());
         User user = subscriber.user();
         if (!streamIdByUser.containsKey(user)) {

@@ -10,8 +10,10 @@ import ru.tinkoff.piapi.contract.v1.OperationType;
 import ru.unclesema.ttb.User;
 import ru.unclesema.ttb.client.InvestClient;
 import ru.unclesema.ttb.service.ApplicationService;
+import ru.unclesema.ttb.service.PortfolioService;
 import ru.unclesema.ttb.service.PriceService;
 import ru.unclesema.ttb.service.UserService;
+import ru.unclesema.ttb.strategy.CandleStrategy;
 import ru.unclesema.ttb.strategy.Strategy;
 import ru.unclesema.ttb.utility.Utility;
 
@@ -29,15 +31,20 @@ import java.util.stream.Collectors;
 @Slf4j
 public class FrontService {
     private static final Instant appStartTime = Instant.now();
-
     private final List<Strategy> availableStrategies;
+    private final List<CandleStrategy> availableCandleStrategies;
     private final ApplicationService applicationService;
     private final PriceService priceService;
     private final UserService userService;
     private final InvestClient investClient;
+    private final PortfolioService portfolioService;
 
     public List<User> getAllUsers() {
         return userService.getAllUsers();
+    }
+
+    public User findUser(String accountId) {
+        return userService.findUserByAccountId(accountId);
     }
 
     public String getInstrumentName(User user, String figi) {
@@ -68,8 +75,8 @@ public class FrontService {
 
     public StrategyStatement getStatement(User user) {
         Map<String, BigDecimal> benefitByCurrency = new HashMap<>();
-        for (Map.Entry<Instrument, Long> entry : getRemainingInstruments(user).entrySet()) {
-            Instrument instrument = entry.getKey();
+        for (Map.Entry<String, Long> entry : getRemainingInstruments(user).entrySet()) {
+            Instrument instrument = investClient.getInstrument(user, entry.getKey());
             Long amount = entry.getValue();
             BigDecimal benefit = benefitByCurrency.getOrDefault(instrument.getCurrency(), BigDecimal.ZERO);
             benefit = benefit.add(priceService.getLastPrice(user, instrument.getFigi()).multiply(BigDecimal.valueOf(amount)));
@@ -81,13 +88,7 @@ public class FrontService {
             Instrument instrument = getInstrument(user, op.getFigi());
             BigDecimal benefit = benefitByCurrency.getOrDefault(instrument.getCurrency(), BigDecimal.ZERO);
             BigDecimal payment = Utility.toBigDecimal(op.getPayment());
-            if (op.getOperationType() == OperationType.OPERATION_TYPE_SELL) {
-                benefit = benefit.add(payment);
-            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_BUY) {
-                benefit = benefit.subtract(payment);
-            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_BROKER_FEE) {
-                benefit = benefit.subtract(payment);
-            }
+            benefit = benefit.add(payment); // в режиме биржи + -
             benefitByCurrency.put(instrument.getCurrency(), benefit);
         }
         return new StrategyStatement(benefitByCurrency, operations);
@@ -99,10 +100,7 @@ public class FrontService {
         if (benefitByCurrency.isEmpty()) {
             return "пока ничего :(";
         }
-        return benefitByCurrency.entrySet()
-                .stream()
-                .map(entry -> entry.getValue().doubleValue() + " " + entry.getKey().toUpperCase())
-                .collect(Collectors.joining(", "));
+        return benefitByCurrency.entrySet().stream().map(entry -> entry.getValue().doubleValue() + " " + entry.getKey().toUpperCase()).collect(Collectors.joining(", "));
     }
 
     public String operationTypeToString(OperationType operationType) {
@@ -125,11 +123,15 @@ public class FrontService {
     }
 
     public boolean isActive(User user) {
-        return applicationService.isActive(user);
+        return userService.isActive(user);
     }
 
     public List<Strategy> getAvailableStrategies() {
         return availableStrategies;
+    }
+
+    public List<CandleStrategy> getAvailableCandleStrategies() {
+        return availableCandleStrategies;
     }
 
     public List<Operation> getOperations(User user) {
@@ -144,27 +146,31 @@ public class FrontService {
         return LocalDateTime.ofInstant(Utility.toInstant(op.getDate()), ZoneId.systemDefault());
     }
 
-    public Map<Instrument, Long> getRemainingInstruments(User user) {
-        List<Operation> operations = getOperations(user);
-        Map<Instrument, Long> remainingInstruments = new HashMap<>();
-        for (Operation op : operations) {
-            if (op.getInstrumentType().equalsIgnoreCase("currency")) continue;
-            Instrument instrument = getInstrument(user, op.getFigi());
-            if (op.getOperationType() == OperationType.OPERATION_TYPE_BUY) {
-                remainingInstruments.merge(instrument, op.getQuantity(), Long::sum);
-            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_SELL) {
-                Long cur = remainingInstruments.getOrDefault(instrument, 0L);
-                if (cur == op.getQuantity()) {
-                    remainingInstruments.remove(instrument);
-                } else {
-                    remainingInstruments.put(instrument, cur - op.getQuantity());
-                }
-            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_BROKER_FEE) {
+    public Map<String, Long> getRemainingInstruments(User user) {
+//        List<Operation> operations = getOperations(user);
+//        Map<Instrument, Long> remainingInstruments = new HashMap<>();
+//        for (Operation op : operations) {
+//            if (op.getInstrumentType().equalsIgnoreCase("currency")) continue;
+//            Instrument instrument = getInstrument(user, op.getFigi());
+//            if (op.getOperationType() == OperationType.OPERATION_TYPE_BUY) {
+//                remainingInstruments.merge(instrument, op.getQuantity(), Long::sum);
+//            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_SELL) {
+//                Long cur = remainingInstruments.getOrDefault(instrument, 0L);
+//                if (cur == op.getQuantity()) {
+//                    remainingInstruments.remove(instrument);
+//                } else {
+//                    remainingInstruments.put(instrument, cur - op.getQuantity());
+//                }
+//            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_BROKER_FEE) {
+//
+//            } else {
+//                log.error("Неизвестный тип операции: {}", op);
+//            }
+//        }
+        return portfolioService.getRemaining(user);
+    }
 
-            } else {
-                log.error("Неизвестный тип операции: {}", op);
-            }
-        }
-        return remainingInstruments;
+    public boolean contains(String accountId) {
+        return userService.contains(accountId);
     }
 }

@@ -92,6 +92,19 @@ public class PriceService {
             requests.removeIf(r -> r.user().equals(user));
         }
     }
+
+    public BigDecimal getPriceInRubles(User user, BigDecimal price, String figi) {
+        String currency = client.getInstrument(user, figi).getCurrency();
+        if (currency.equalsIgnoreCase("rub")) {
+            return price;
+        }
+        var optionalCurrency = client.loadAllCurrencies(user).stream().filter(c -> c.getIsoCurrencyName().equalsIgnoreCase(currency)).findAny();
+        if (optionalCurrency.isEmpty()) {
+            throw new IllegalArgumentException("Не получается найти валюту " + currency);
+        }
+        BigDecimal lastCurrencyPrice = getLastPrice(user, optionalCurrency.get().getFigi());
+        return lastCurrencyPrice.multiply(price);
+    }
 }
 
 record StopRequest(User user, String figi, BigDecimal takeProfit, BigDecimal stopLoss, OrderDirection direction) {

@@ -1,13 +1,6 @@
-function onCopy(token) {
-    navigator.clipboard.writeText(token);
-
-    const tooltip = document.getElementById("copy-tip");
-    tooltip.innerHTML = "Токен скопирован";
-}
-
-function onCopyOut() {
-    const tooltip = document.getElementById("copy-tip");
-    tooltip.innerHTML = "Копировать в буфер обмена";
+function popupIn(id, text) {
+    const tooltip = document.getElementById(id)
+    tooltip.innerHTML = text
 }
 
 const figiList = []
@@ -46,16 +39,6 @@ function onSelectChanged(e) {
     document.getElementById(e.value).style.display = "block"
 }
 
-let selectedPage = ""
-
-function onChangePage(name) {
-    document.getElementById(selectedPage).style.display = "none"
-    selectedPage = "page-" + name
-    document.getElementById(selectedPage).style.display = "block"
-}
-
 document.addEventListener("DOMContentLoaded", (_) => {
     addFigiField()
-    selectedPage = (document.getElementById("page-0") == null ? "page-add" : "page-0")
-    document.getElementById(selectedPage).style.display = "block"
 })

@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <title>Мои инвестиции</title>
+    <meta charset="UTF-8">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@100;400;500&display=swap" rel="stylesheet">
+    <link th:href="@{/css/style.css}" rel="stylesheet"/>
+    <script type="text/javascript" th:src="@{/js/script.js}"></script>
+    <script th:inline="javascript">
+        const availableStrategies = [[${frontService.getAvailableStrategies()}]]
+        const availableCandleStrategies = [[${frontService.getAvailableCandleStrategies()}]]
+
+        function onModeChange(e) {
+            document.getElementById('accountIdLabel').style.display = (e.value === 'MARKET' ? 'block' : 'none')
+            document.getElementById('accountIdField').required = (e.value === 'MARKET')
+            renderStrategies()
+            onSelectChanged(document.getElementById("strategy-select"))
+        }
+
+        function renderStrategies() {
+            const element = document.getElementById('strategy-select')
+            const mode = document.getElementById('mode')
+            let strategies
+            if (mode.value === 'ANALYZE') {
+                strategies = availableCandleStrategies
+            } else {
+                strategies = availableStrategies
+            }
+            element.innerHTML = ""
+            for (const st of strategies) {
+                element.innerHTML += `<option>${st['name']}</option>`
+            }
+        }
+
+        document.addEventListener("DOMContentLoaded", (_) => {
+            renderStrategies()
+        })
+    </script>
+</head>
+<body>
+<aside>
+    <th:block th:each="user, iStat : ${frontService.getAllUsers()}">
+        <a th:href="'/' + ${user.accountId()}" th:text="${iStat.index}+1"></a>
+    </th:block>
+    <a href="/">+</a>
+</aside>
+<main>
+    <div class="page" id="page-add">
+        <div class="card">
+            <h4>Новый пользователь</h4>
+            <p>Заполните поля ниже, чтобы настроить нового пользователя и бота для него.</p>
+        </div>
+        <form action="/user" method="post" th:object="${newUserRequest}">
+            <fieldset class="card">
+                <h4>Информация о пользователе</h4>
+                <label>
+                    <span>Введите токен:</span>
+                    <br>
+                    <input th:field="*{token}" type="password" required>
+                </label>
+                <label>
+                    <span>Выберите режим:</span>
+                    <br>
+                    <select th:field="*{mode}"
+                            onchange="onModeChange(this)" id='mode'>
+                        <option value="SANDBOX" selected>Песочница</option>
+                        <option value="MARKET">Биржа</option>
+                        <option value="ANALYZE">Анализ</option>
+                    </select>
+                </label>
+                <label style="display: none" id="accountIdLabel">
+                    <span>Введите Id аккаунта:</span>
+                    <br>
+                    <input id="accountIdField" type="text" th:field="*{accountId}">
+                </label>
+            </fieldset>
+            <fieldset class="card">
+                <h4>Настройки бота</h4>
+                <label>
+                    <span>Выберите стратегию:</span>
+                    <br>
+                    <select id="strategy-select" onchange="onSelectChanged(this)">
+                        <option th:each="s : ${frontService.getAvailableStrategies()}" th:text="${s.getName()}"/>
+                    </select>
+                </label>
+                <span>Параметры стратегии</span>
+                <table class="strategy" th:each="strat, stat : ${frontService.getAvailableStrategies()}"
+                       th:id="${strat.getName()}">
+                    <input type="hidden" id="strategyParametersname" name="strategyParameters[name]"
+                           th:value="${strat.getName()}" th:class="'st-form st-form-' + ${strat.getName()}"
+                           th:disabled="${stat.index != 0} ?: 'disabled'">
+                    <tr>
+                        <th>Параметр</th>
+                        <th>Значение</th>
+                    </tr>
+                    <tr th:each="par : ${strat.getUIAttributes()}">
+                        <td th:text="${par.key}"></td>
+                        <td>
+                            <input type="text" th:value="${par.value}" th:id="'strategyParameters'+${par.key}"
+                                   th:name="'strategyParameters['+${par.key}+']'"
+                                   th:class="'st-form st-form-' + ${strat.getName()}"
+                                   th:disabled="${stat.index != 0} ?: 'disabled'">
+                        </td>
+                    </tr>
+                </table>
+                <label>
+                    <span>Введите максимальное количество рублей, которое может потратить бот:</span>
+                    <br>
+                    <input th:field="*{maxBalance}" type="number" required>
+                </label>
+                <span>Figi, за которыми будет следить бот</span>
+                <div id="figi-list">
+                </div>
+                <button type="button" onclick="addFigiField()">Добавить поле</button>
+                <input type="hidden" name="figis" id="figis">
+            </fieldset>
+            <fieldset class="card">
+                <h4>Отправка настроек</h4>
+                <p>Убедитесь, что всё заполнили верно. Бот будет запущен, только после того как Вы нажмёте `запустить`
+                    на странице пользователя, после его создания</p>
+                <button>Отправить</button>
+            </fieldset>
+        </form>
+    </div>
+</main>
+</body>
+</html>

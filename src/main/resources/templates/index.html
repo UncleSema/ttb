@@ -12,173 +12,99 @@
 <body>
 <aside>
     <th:block th:each="user, iStat : ${frontService.getAllUsers()}">
-        <a th:onclick="'onChangePage(' + ${iStat.index} + ')'" th:text="${iStat.index}+1"/>
+        <a th:href="'/' + ${user.accountId()}" th:text="${iStat.index}+1"></a>
     </th:block>
-    <a id="a-add" onclick="onChangePage('add')">+</a>
+    <a href="/">+</a>
 </aside>
 <main>
-    <th:block th:each="user, iStat : ${frontService.getAllUsers()}">
-        <div class="page" th:id="'page-'+${iStat.index}" style="display: none">
-            <div class="card">
-                <h4>Пользователь</h4>
-                <p th:text="'Аккаунт ID: ' + ${user.accountId()}"></p>
-                <table>
-                    <tr>
-                        <th>Figi</th>
-                        <th>Название</th>
-                        <th>Валюта</th>
-                    </tr>
-                    <tr th:each="figi : ${user.figis()}">
-                        <td th:text="${figi}"/>
-                        <td th:text="${frontService.getInstrumentName(user, figi)}"/>
-                        <td th:text="${frontService.getInstrument(user, figi).getCurrency().toUpperCase()}"/>
-                    </tr>
-                </table>
-                <table>
-                    <tr>
-                        <th>Название</th>
-                        <th>Figi</th>
-                        <th>Количество</th>
-                        <th>Единичная стоимость</th>
-                        <th>Полная стоимость</th>
-                    </tr>
-                    <tr th:each="position : ${frontService.getRemainingInstruments(user)}">
-                        <td th:text="${frontService.getInstrumentName(user, position.key.figi)}"/>
-                        <td th:text="${position.key.figi}"/>
-                        <td th:text="${position.value}"/>
-                        <td th:text="${frontService.lastPriceToString(user, 1, position.key.figi)}"/>
-                        <td th:text="${frontService.lastPriceToString(user, position.value, position.key.figi)}"/>
-                    </tr>
-                </table>
+    <div class="page">
+        <div class="card">
+            <h4>Пользователь</h4>
+            <p th:text="'Аккаунт ID: ' + ${user.accountId()}"></p>
+            <table>
+                <tr>
+                    <th>Figi</th>
+                    <th>Название</th>
+                    <th>Валюта</th>
+                </tr>
+                <tr th:each="figi : ${user.figis()}">
+                    <td th:text="${figi}"/>
+                    <td th:text="${frontService.getInstrumentName(user, figi)}"/>
+                    <td th:text="${frontService.getInstrument(user, figi).getCurrency().toUpperCase()}"/>
+                </tr>
+            </table>
+            <table>
+                <tr>
+                    <th>Название</th>
+                    <th>Figi</th>
+                    <th>Количество</th>
+                    <th>Единичная стоимость</th>
+                    <th>Полная стоимость</th>
+                </tr>
+                <tr th:each="position : ${frontService.getRemainingInstruments(user)}">
+                    <td th:text="${frontService.getInstrumentName(user, position.key)}"/>
+                    <td th:text="${position.key}"/>
+                    <td th:text="${position.value}"/>
+                    <td th:text="${frontService.lastPriceToString(user, 1, position.key)}"/>
+                    <td th:text="${frontService.lastPriceToString(user, position.value, position.key)}"/>
+                </tr>
+            </table>
+        </div>
+        <div class="card">
+            <h4>Стратегия</h4>
+            <p th:text="'Максимальное количество денег, которое может потратить бот: ' + ${user.maxBalance()} + ' рублей'"></p>
+            <table>
+                <tr>
+                    <th>Название параметра</th>
+                    <th>Значение параметра</th>
+                </tr>
+                <tr th:each="parameter : ${user.strategy().getUIAttributes()}">
+                    <td th:text="${parameter.key}"/>
+                    <td th:text="${parameter.value}"/>
+                </tr>
+            </table>
+        </div>
+        <div class="card">
+            <h4> Текущие результаты стратегии </h4>
+            <p th:text="'Заработано: ' + ${frontService.printBenefits(user)}"/>
+            <p th:text="'Стоимость портфеля: ' + ${frontService.getBalance(user).doubleValue()} + ' RUB'"/>
+            <table>
+                <tr>
+                    <th>Название</th>
+                    <th>Figi</th>
+                    <th>Дата</th>
+                    <th>Тип операции</th>
+                    <th>Стоимость</th>
+                </tr>
+                <tr th:each="operation : ${frontService.getStatement(user).operationsOrder()}">
+                    <td th:text="${frontService.getInstrumentName(user, operation.figi)}"/>
+                    <td th:text="${operation.figi}"/>
+                    <td th:text="${#temporals.format(frontService.getDate(operation), 'HH:mm:ss dd.MM.yyyy')}"/>
+                    <td th:text="${frontService.operationTypeToString(operation.operationType)}"/>
+                    <td th:text="${frontService.moneyValueToString(user, operation.figi, operation.getPayment())}"/>
+                </tr>
+            </table>
+            <form action="/sell-all" method="post">
+                <input type="hidden" name="accountId" th:value="${user.accountId()}">
                 <div class="tooltip">
-                    <button id="token-copy" th:attr="onclick=|onCopy('${user.token()}')|" onmouseout="onCopyOut()">
-                        <span id="copy-tip">Копировать в буфер обмена</span>
-                        Скопировать токен
+                    <button>
+                        <span class="tip">Продать все бумаги, которые купила стратегия</span>
+                        Продать всё
                     </button>
                 </div>
-            </div>
-            <div class="card">
-                <h4>Стратегия</h4>
-                <p th:text="'Максимальное количество денег, которое может потратить бот: ' + ${user.maxBalance()} + ' рублей'"></p>
-                <table>
-                    <tr>
-                        <th>Название параметра</th>
-                        <th>Значение параметра</th>
-                    </tr>
-                    <tr th:each="parameter : ${user.strategy().getUIAttributes()}">
-                        <td th:text="${parameter.key}"/>
-                        <td th:text="${parameter.value}"/>
-                    </tr>
-                </table>
-            </div>
-            <div class="card">
-                <h4> Текущие результаты стратегии </h4>
-                <p th:text="'Заработано: ' + ${frontService.printBenefits(user)}"/>
-                <p th:text="'Стоимость портфеля: ' + ${frontService.getBalance(user).doubleValue()} + ' RUB'"/>
-                <table>
-                    <tr>
-                        <th>Название</th>
-                        <th>Figi</th>
-                        <th>Дата</th>
-                        <th>Тип операции</th>
-                        <th>Стоимость</th>
-                    </tr>
-                    <tr th:each="operation : ${frontService.getStatement(user).operationsOrder()}">
-                        <td th:text="${frontService.getInstrumentName(user, operation.figi)}"/>
-                        <td th:text="${operation.figi}"/>
-                        <td th:text="${#temporals.format(frontService.getDate(operation), 'HH:mm:ss dd.MM.yyyy')}"/>
-                        <td th:text="${frontService.operationTypeToString(operation.operationType)}"/>
-                        <td th:text="${frontService.moneyValueToString(user, operation.figi, operation.getPayment())}"/>
-                    </tr>
-                </table>
-                <form action="/sell-all" method="post">
-                    <input type="hidden" name="accountId" th:value="${user.accountId()}">
-                    <button>Продать всё</button>
-                </form>
-                <form th:action="${!frontService.isActive(user)} ? '/strategy/enable' : '/strategy/disable'"
-                      method="post">
-                    <input type="hidden" name="accountId" th:value="${user.accountId()}">
-                    <button th:text="${!frontService.isActive(user)} ? 'Запустить стратегию' : 'Остановить стратегию'"/>
-                </form>
-            </div>
-        </div>
-    </th:block>
-    <div class="page" id="page-add" style="display:none">
-        <div class="card">
-            <h4>Новый пользователь</h4>
-            <p>Заполните поля ниже, чтобы настроить нового пользователя и бота для него.</p>
-        </div>
-        <form action="/user" method="post" th:object="${newUserRequest}">
-            <fieldset class="card">
-                <h4>Информация о пользователе</h4>
-                <label>
-                    <span>Введите токен:</span>
-                    <br>
-                    <input th:field="*{token}" type="password" required>
-                </label>
-                <label>
-                    <span>Выберите режим:</span>
-                    <br>
-                    <select th:field="*{mode}"
-                            onchange="document.getElementById('accountIdField').style.display=(value === 'MARKET' ? 'block' : 'none')">
-                        <option value="SANDBOX" selected>Песочница</option>
-                        <option value="MARKET">Биржа</option>
-                        <option value="ANALYZE">Анализ</option>
-                    </select>
-                </label>
-                <label style="display: none" id="accountIdField">
-                    <span>Введите Id аккаунта:</span>
-                    <br>
-                    <input type="text" th:field="*{accountId}">
-                </label>
-            </fieldset>
-            <fieldset class="card">
-                <h4>Настройки бота</h4>
-                <label>
-                    <span>Выберите стратегию:</span>
-                    <br>
-                    <select onchange="onSelectChanged(this)">
-                        <option th:each="s : ${frontService.getAvailableStrategies()}" th:text="${s.getName()}"/>
-                    </select>
-                </label>
-                <span>Параметры стратегии</span>
-                <table class="strategy" th:each="strat, stat : ${frontService.getAvailableStrategies()}"
-                       th:id="${strat.getName()}">
-                    <input type="hidden" id="strategyParametersname" name="strategyParameters[name]"
-                           th:value="${strat.getName()}" th:class="'st-form st-form-' + ${strat.getName()}"
-                           th:disabled="${stat.index != 0} ?: 'disabled'">
-                    <tr>
-                        <th>Параметр</th>
-                        <th>Значение</th>
-                    </tr>
-                    <tr th:each="par : ${strat.getUIAttributes()}">
-                        <td th:text="${par.key}"/>
-                        <td>
-                            <input type="text" th:value="${par.value}" th:id="'strategyParameters'+${par.key}"
-                                   th:name="'strategyParameters['+${par.key}+']'"
-                                   th:class="'st-form st-form-' + ${strat.getName()}"
-                                   th:disabled="${stat.index != 0} ?: 'disabled'">
-                        </td>
-                    </tr>
-                </table>
-                <label>
-                    <span>Введите максимальное количество рублей, которое может потратить бот:</span>
-                    <br>
-                    <input th:field="*{maxBalance}" type="number" required>
-                </label>
-                <span>Figi, за которыми будет следить бот</span>
-                <div id="figi-list">
+            </form>
+            <form th:action="${!frontService.isActive(user)} ? '/strategy/enable' : '/strategy/disable'"
+                  method="post">
+                <input type="hidden" name="accountId" th:value="${user.accountId()}">
+                <div class="tooltip">
+                    <button>
+                        <span class="tip"
+                              th:text="${!frontService.isActive(user)} ? 'Запустить работу стратегии (позже сможете остановить)' : 'Остановить работу стратегии (позже сможете запустить)'"/>
+                        <span th:text="${!frontService.isActive(user)} ? 'Запустить стратегию' : 'Остановить стратегию'"/>
+                    </button>
                 </div>
-                <button type="button" onclick="addFigiField()">Добавить поле</button>
-                <input type="hidden" name="figis" id="figis">
-            </fieldset>
-            <fieldset class="card">
-                <h4>Отправка настроек</h4>
-                <p>Убедитесь, что всё заполнили верно. Бот будет запущен, только после того как Вы нажмёте `запустить`
-                    на странице пользователя, после его создания</p>
-                <button>Отправить</button>
-            </fieldset>
-        </form>
+            </form>
+        </div>
     </div>
 </main>
 </body>
