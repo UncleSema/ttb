@@ -250,7 +250,8 @@ public class ApplicationService {
      */
     private boolean canMakeOperationNow(User user, Instant now, BigDecimal price, String figi) {
         var alreadySpent = priceService.getBalance(user);
-        var priceInRubles = priceService.getPriceInRubles(user, price, figi);
+        var instrument = investClient.getInstrument(user, figi);
+        var priceInRubles = priceService.getPriceInRubles(user, price, figi).multiply(BigDecimal.valueOf(instrument.getLot()));
         var newBalance = alreadySpent.add(priceInRubles);
         if (newBalance.compareTo(user.maxBalance()) > 0) {
             log.warn("Недостаточно средств для операции, требуется {} RUB, а осталось {} RUB", priceInRubles, user.maxBalance().subtract(alreadySpent));

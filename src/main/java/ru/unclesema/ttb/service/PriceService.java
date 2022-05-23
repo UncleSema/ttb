@@ -96,8 +96,9 @@ public class PriceService {
      */
     public void processNewOperation(User user, String figi, BigDecimal takeProfit, BigDecimal price, BigDecimal stopLoss, OrderDirection direction) {
         var stopRequestDirection = direction == OrderDirection.ORDER_DIRECTION_BUY ? OrderDirection.ORDER_DIRECTION_SELL : OrderDirection.ORDER_DIRECTION_BUY;
+        var instrument = client.getInstrument(user, figi);
         addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, stopRequestDirection));
-        addToBalance(user, getPriceInRubles(user, price, figi));
+        addToBalance(user, getPriceInRubles(user, price, figi).multiply(BigDecimal.valueOf(instrument.getLot())));
     }
 
     /**
