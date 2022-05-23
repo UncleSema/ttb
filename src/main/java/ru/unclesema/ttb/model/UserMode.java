@@ -1,4 +1,4 @@
-package ru.unclesema.ttb;
+package ru.unclesema.ttb.model;
 
 public enum UserMode {
     SANDBOX,

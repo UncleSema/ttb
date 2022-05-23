@@ -1,7 +1,7 @@
 package ru.unclesema.ttb.service;
 
 import org.springframework.stereotype.Service;
-import ru.unclesema.ttb.User;
+import ru.unclesema.ttb.model.User;
 import ru.unclesema.ttb.strategy.CandleStrategy;
 import ru.unclesema.ttb.strategy.OrderBookStrategy;
 

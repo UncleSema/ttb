@@ -1,0 +1,16 @@
+user:
+  token: ''
+  mode: analyze
+  account-id: ''
+  strategy-enable: false
+  figis:
+    - "BBG002NLDLV8"
+    - "BBG000BCGHH7"
+    - "BBG001KJ7WJ5"
+    - "BBG00KHRRDX3"
+    - "BBG006L8G4H1"
+    - "BBG00Y91R9T3"
+    - "BBG005DXJS36"
+  max-balance: 4000
+  strategy-parameters:
+    name: "RSI"

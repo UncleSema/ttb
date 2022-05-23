@@ -5,6 +5,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import ru.unclesema.ttb.model.NewUserRequest;
+import ru.unclesema.ttb.model.StartupRequest;
+import ru.unclesema.ttb.model.User;
 import ru.unclesema.ttb.service.ApplicationService;
 
 import javax.annotation.PostConstruct;

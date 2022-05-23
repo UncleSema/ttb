@@ -11,6 +11,7 @@ import ru.unclesema.ttb.utility.Utility;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -19,38 +20,44 @@ import java.util.Map;
 @Getter
 public class RsiStrategy implements CandleStrategy {
     private int rsiPeriod = 14;
-    private BigDecimal upperRsiThreshold = BigDecimal.valueOf(70);
-    private BigDecimal lowerRsiThreshold = BigDecimal.valueOf(30);
-    private BigDecimal takeProfit = BigDecimal.valueOf(15);
-    private BigDecimal stopLoss = BigDecimal.valueOf(5);
+    private double upperRsiThreshold = 70;
+    private double lowerRsiThreshold = 30;
+    private double takeProfit = 5;
+    private double stopLoss = 10;
 
-    private final List<Candle> lastCandlesList = new ArrayList<>();
+    private final Map<String, List<Candle>> lastCandlesByFigi = new HashMap<>();
 
     @Override
     public StrategyDecision addCandle(Candle candle) {
-        if (lastCandlesList.size() == rsiPeriod) {
-            lastCandlesList.remove(0);
-            lastCandlesList.add(candle);
+        if (!lastCandlesByFigi.containsKey(candle.getFigi())) {
+            lastCandlesByFigi.put(candle.getFigi(), new ArrayList<>());
         }
-        if (rsi().compareTo(upperRsiThreshold) >= 0) {
+        var lastCandles = lastCandlesByFigi.get(candle.getFigi());
+        if (lastCandles.size() == rsiPeriod) {
+            lastCandles.remove(0);
+        }
+        lastCandles.add(candle);
+        var rsi = rsi(candle.getFigi()).doubleValue();
+        if (rsi >= upperRsiThreshold) {
             return StrategyDecision.BUY;
         }
-        if (rsi().compareTo(lowerRsiThreshold) <= 0) {
+        if (rsi <= lowerRsiThreshold) {
             return StrategyDecision.SELL;
         }
         return StrategyDecision.NOTHING;
     }
 
-    private BigDecimal rsi() {
-        BigDecimal totalGain = BigDecimal.ZERO;
-        int gainAmount = 0;
-        BigDecimal totalLoss = BigDecimal.ZERO;
-        int lossAmount = 0;
+    private BigDecimal rsi(String figi) {
+        var totalGain = BigDecimal.ZERO;
+        var gainAmount = 0;
+        var totalLoss = BigDecimal.ZERO;
+        var lossAmount = 0;
 
-        for (int i = 1; i < lastCandlesList.size(); i++) {
-            BigDecimal candleClosePrice = Utility.toBigDecimal(lastCandlesList.get(i).getClose());
-            BigDecimal prevCandleClosePrice = Utility.toBigDecimal(lastCandlesList.get(i - 1).getClose());
-            BigDecimal change = candleClosePrice.subtract(prevCandleClosePrice);
+        var lastCandles = lastCandlesByFigi.get(figi);
+        for (int i = 1; i < lastCandles.size(); i++) {
+            var candleClosePrice = Utility.toBigDecimal(lastCandles.get(i).getClose());
+            var prevCandleClosePrice = Utility.toBigDecimal(lastCandles.get(i - 1).getClose());
+            var change = candleClosePrice.subtract(prevCandleClosePrice);
             if (candleClosePrice.equals(prevCandleClosePrice)) continue;
 
             if (change.compareTo(BigDecimal.ZERO) >= 0) {
@@ -64,14 +71,14 @@ public class RsiStrategy implements CandleStrategy {
         if (gainAmount == 0) gainAmount = 1;
         if (lossAmount == 0) lossAmount = 1;
 
-        BigDecimal avgGain = totalGain.divide(BigDecimal.valueOf(gainAmount), RoundingMode.DOWN);
+        var avgGain = totalGain.divide(BigDecimal.valueOf(gainAmount), RoundingMode.DOWN);
         if (avgGain.equals(BigDecimal.ZERO)) avgGain = BigDecimal.ONE;
 
-        BigDecimal avgLoss = totalLoss.divide(BigDecimal.valueOf(lossAmount), RoundingMode.DOWN);
+        var avgLoss = totalLoss.divide(BigDecimal.valueOf(lossAmount), RoundingMode.DOWN);
         if (avgLoss.equals(BigDecimal.ZERO)) avgLoss = BigDecimal.ONE;
 
-        BigDecimal rs = avgGain.divide(avgLoss, RoundingMode.DOWN).abs();
-        BigDecimal hundred = BigDecimal.valueOf(100);
+        var rs = avgGain.divide(avgLoss, RoundingMode.DOWN).abs();
+        var hundred = BigDecimal.valueOf(100);
         return hundred.subtract(hundred.divide(BigDecimal.ONE.add(rs), RoundingMode.DOWN));
     }
 
@@ -82,12 +89,12 @@ public class RsiStrategy implements CandleStrategy {
 
     @Override
     public double getTakeProfit() {
-        return takeProfit.doubleValue();
+        return takeProfit;
     }
 
     @Override
     public double getStopLoss() {
-        return stopLoss.doubleValue();
+        return stopLoss;
     }
 
     @Override

@@ -3,6 +3,7 @@ package ru.unclesema.ttb;
 import lombok.extern.slf4j.Slf4j;
 import ru.tinkoff.piapi.contract.v1.MarketDataResponse;
 import ru.tinkoff.piapi.core.stream.StreamProcessor;
+import ru.unclesema.ttb.model.User;
 import ru.unclesema.ttb.service.ApplicationService;
 
 @Slf4j

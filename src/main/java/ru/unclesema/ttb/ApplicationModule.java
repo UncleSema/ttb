@@ -1,8 +1,12 @@
 package ru.unclesema.ttb;
 
+import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.KeyDeserializer;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.google.protobuf.Descriptors;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
-import ru.unclesema.ttb.client.InvestClient;
 import ru.unclesema.ttb.service.ApplicationService;
 import ru.unclesema.ttb.strategy.CandleStrategy;
 import ru.unclesema.ttb.strategy.Strategy;
@@ -19,8 +23,15 @@ public class ApplicationModule {
     }
 
     @Bean
-    public InvestClient getInvestClient() {
-        return new InvestClient();
+    public ObjectMapper objectMapper() {
+        SimpleModule module = new SimpleModule();
+        module = module.addKeyDeserializer(Descriptors.FieldDescriptor.class, new KeyDeserializer() {
+            @Override
+            public Object deserializeKey(String key, DeserializationContext ctxt) {
+                return key;
+            }
+        });
+        return new ObjectMapper().registerModule(module);
     }
 
     @Bean

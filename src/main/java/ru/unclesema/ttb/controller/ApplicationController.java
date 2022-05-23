@@ -8,10 +8,14 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.servlet.ModelAndView;
-import ru.unclesema.ttb.NewUserRequest;
-import ru.unclesema.ttb.User;
+import ru.tinkoff.piapi.contract.v1.CandleInterval;
+import ru.unclesema.ttb.model.NewUserRequest;
+import ru.unclesema.ttb.model.User;
 import ru.unclesema.ttb.service.ApplicationService;
 import ru.unclesema.ttb.service.front.FrontService;
+
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 @Controller
 @RequiredArgsConstructor
@@ -44,6 +48,12 @@ public class ApplicationController {
 //            model.addAttribute(e);
 //            return new ModelAndView("redirect:/app-error", model);
 //        }
+    }
+
+    @PostMapping("/simulate")
+    public String simulate(String accountId, LocalDateTime from, LocalDateTime to, CandleInterval interval) {
+        service.simulate(frontService.findUser(accountId), from.toInstant(ZoneOffset.UTC), to.toInstant(ZoneOffset.UTC), interval);
+        return "redirect:/" + accountId;
     }
 
     @PostMapping("/user")

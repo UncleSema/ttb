@@ -82,7 +82,7 @@
                     <span>Выберите стратегию:</span>
                     <br>
                     <select id="strategy-select" onchange="onSelectChanged(this)">
-                        <option th:each="s : ${frontService.getAvailableStrategies()}" th:text="${s.getName()}"/>
+                        <option th:each="s : ${frontService.getAvailableStrategies()}" th:text="${s.getName()}"></option>
                     </select>
                 </label>
                 <span>Параметры стратегии</span>
@@ -101,7 +101,7 @@
                             <input type="text" th:value="${par.value}" th:id="'strategyParameters'+${par.key}"
                                    th:name="'strategyParameters['+${par.key}+']'"
                                    th:class="'st-form st-form-' + ${strat.getName()}"
-                                   th:disabled="${stat.index != 0} ?: 'disabled'">
+                                   th:disabled="${stat.index != 0} ?: 'disabled'" required>
                         </td>
                     </tr>
                 </table>
@@ -118,7 +118,7 @@
             </fieldset>
             <fieldset class="card">
                 <h4>Отправка настроек</h4>
-                <p>Убедитесь, что всё заполнили верно. Бот будет запущен, только после того как Вы нажмёте `запустить`
+                <p>Убедитесь, что всё заполнили верно. Бот будет запущен, только после того как Вы нажмёте `Запустить`
                     на странице пользователя, после его создания</p>
                 <button>Отправить</button>
             </fieldset>

@@ -6,10 +6,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.tinkoff.piapi.contract.v1.*;
 import ru.unclesema.ttb.MarketSubscriber;
-import ru.unclesema.ttb.NewUserRequest;
-import ru.unclesema.ttb.User;
-import ru.unclesema.ttb.UserMode;
 import ru.unclesema.ttb.client.InvestClient;
+import ru.unclesema.ttb.model.NewUserRequest;
+import ru.unclesema.ttb.model.User;
+import ru.unclesema.ttb.model.UserMode;
 import ru.unclesema.ttb.strategy.CandleStrategy;
 import ru.unclesema.ttb.strategy.OrderBookStrategy;
 import ru.unclesema.ttb.strategy.Strategy;
@@ -18,7 +18,6 @@ import ru.unclesema.ttb.utility.Utility;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,14 +31,15 @@ public class ApplicationService {
     private final InvestClient investClient;
     private final UserService userService;
     private final PriceService priceService;
+    private final AnalyzeService analyzeService;
     private final List<Strategy> availableStrategies;
+    private final ObjectMapper objectMapper;
 
+    private static final long OPERATIONS_PERIOD_SECONDS = 30;
     private final Map<User, MarketSubscriber> orderBookSubscriberByUser = new HashMap<>();
     private final Map<User, MarketSubscriber> candlesSubscriberByUser = new HashMap<>();
     private final Map<User, MarketSubscriber> lastPricesSubscriberByUser = new HashMap<>();
-    private static final ObjectMapper objectMapper = new ObjectMapper();
-    private LocalDateTime lastBought = null;
-    private static final long OPERATIONS_PERIOD_SECONDS = 30;
+    private final Map<User, Instant> lastBoughtByUser = new HashMap<>();
 
     public User addNewUser(NewUserRequest request) {
         Map<String, String> strategyParameters = request.getStrategyParameters();
@@ -58,18 +58,15 @@ public class ApplicationService {
         Class<? extends Strategy> strategyClazz = strategyOptional.get().getClass();
         Strategy strategy = objectMapper.convertValue(strategyParameters, strategyClazz);
         request.getFigis().removeIf(String::isBlank);
-        String accountId = request.getAccountId();
-        if (request.getMode() == UserMode.SANDBOX) {
-            accountId = investClient.addSandboxUser(request.getToken());
-        } else if (request.getMode() == UserMode.MARKET) {
+        if (request.getMode() == UserMode.MARKET) {
             if (request.getAccountId().isBlank()) {
                 throw new IllegalArgumentException("Для режима реальной торговли необходимо указать accountId");
             }
             if (userService.contains(request.getAccountId())) {
-                throw new IllegalArgumentException("Пользователь с accountId = " + accountId + " уже существует");
+                throw new IllegalArgumentException("Пользователь с accountId = " + request.getAccountId() + " уже существует");
             }
-            investClient.addMarketUser(request.getToken());
         }
+        String accountId = investClient.addUser(request.getToken(), request.getAccountId(), request.getMode());
         User user = new User(request.getToken(), request.getMode(), request.getMaxBalance(), accountId, request.getFigis(), strategy);
         userService.addUser(user);
         return user;
@@ -80,7 +77,10 @@ public class ApplicationService {
             OrderBookStrategy strategy = (OrderBookStrategy) user.strategy();
             String figi = orderBook.getFigi();
             StrategyDecision decision = strategy.addOrderBook(orderBook);
-            processStrategyDecision(user, figi, priceService.getLastPrice(user, figi), decision);
+            BigDecimal lastPrice = priceService.getLastPrice(user, figi);
+            if (canMakeOperationNow(user, lastPrice, figi)) {
+                processStrategyDecision(user, figi, Instant.now(), lastPrice, decision);
+            }
         }
     }
 
@@ -89,46 +89,61 @@ public class ApplicationService {
             CandleStrategy strategy = (CandleStrategy) user.strategy();
             String figi = candle.getFigi();
             StrategyDecision decision = strategy.addCandle(candle);
-            processStrategyDecision(user, figi, priceService.getLastPrice(user, figi), decision);
+            BigDecimal lastPrice = priceService.getLastPrice(user, figi);
+            if (canMakeOperationNow(user, lastPrice, figi)) {
+                processStrategyDecision(user, figi, Instant.now(), lastPrice, decision);
+            }
         }
     }
 
-    public void simulate(User user, Instant from, Instant to) {
-        List<Candle> candles = investClient.getCandles(user, from, to).join();
+    public void simulate(User user, Instant from, Instant to, CandleInterval interval) {
+        log.info("Запрос просимулировать стратегию для {} с {} по {} с интервалом {}", user, from, to, interval);
+        if (user.mode() != UserMode.ANALYZE) {
+            throw new IllegalArgumentException("Используйте `ANALYZE` режим, чтобы симулировать работу стратегии");
+        }
         if (!(user.strategy() instanceof CandleStrategy strategy)) {
             throw new UnsupportedOperationException("Чтобы просимулировать на исторических данных работу стратегии, она должна реализовывать CandleStrategy интерфейс");
         }
-        for (Candle candle : candles) {
-            StrategyDecision decision = strategy.addCandle(candle);
-            String figi = candle.getFigi();
-            processStrategyDecision(user, figi, Utility.toBigDecimal(candle.getClose()), decision);
+        var candles = investClient.getCandles(user, from, to, interval).join();
+        for (var candle : candles) {
+            var decision = strategy.addCandle(candle);
+            var figi = candle.getFigi();
+            var price = Utility.toBigDecimal(candle.getClose());
+            var time = Utility.toInstant(candle.getTime());
+            analyzeService.processNewCandle(user, candle);
+            priceService.checkStopRequests(Utility.toLastPrice(candle));
+            if (canMakeOperationNow(user, time, price, figi)) {
+                processStrategyDecision(user, figi, time, Utility.toBigDecimal(candle.getClose()), decision);
+            }
         }
+        log.info("Симуляция для {} завершена", user);
+        priceService.deleteRequestsForUser(user);
     }
 
-    private void processStrategyDecision(User user, String figi, BigDecimal currentPrice, StrategyDecision decision) {
+    private void processStrategyDecision(User user, String figi, Instant now, BigDecimal currentPrice, StrategyDecision decision) {
         if (decision == StrategyDecision.NOTHING) return;
         boolean isBuy = decision == StrategyDecision.BUY;
         BigDecimal profit = BigDecimal.valueOf(1 + (isBuy ? 1 : -1) * user.strategy().getTakeProfit() / 100);
         BigDecimal loss = BigDecimal.valueOf(1 - (isBuy ? 1 : -1) * user.strategy().getStopLoss() / 100);
         BigDecimal takeProfit = currentPrice.multiply(profit);
         BigDecimal stopLoss = currentPrice.multiply(loss);
-        LocalDateTime now = LocalDateTime.now();
         Instrument instrument = investClient.getInstrument(user, figi);
-        if (isBuy && canMakeOperationNow(user, currentPrice, figi)) {
+        if (isBuy) {
             log.info("Стратегия собирается пойти в лонг по бумаге с figi {}.\nЦена покупки: {}.\nTakeProfit: {}.\nStopLoss: {}",
                     figi, currentPrice, takeProfit, stopLoss);
-            lastBought = now;
-            investClient.buyMarket(user, figi, currentPrice).thenAcceptAsync(response -> {
-                priceService.addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, OrderDirection.ORDER_DIRECTION_SELL));
-                investClient.addToBalance(user, priceService.getPriceInRubles(user, currentPrice, figi));
-            });
-        } else if (!isBuy && instrument.getShortEnabledFlag() && canMakeOperationNow(user, currentPrice, figi)) {
+            var response = investClient.buyMarket(user, figi, currentPrice).join();
+            if (response != null) {
+                priceService.processNewOperation(user, figi, takeProfit, currentPrice, stopLoss, OrderDirection.ORDER_DIRECTION_BUY);
+                lastBoughtByUser.put(user, now);
+            }
+        } else if (instrument.getShortEnabledFlag()) {
             log.info("Стратегия собирается пойти в шорт по бумаге с figi {}.\nЦена покупки: {}.\nTakeProfit: {}.\nStopLoss: {}",
                     figi, currentPrice, takeProfit, stopLoss);
-            lastBought = now;
-            investClient.sellMarket(user, figi, currentPrice).thenAcceptAsync(response -> {
-                priceService.addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, OrderDirection.ORDER_DIRECTION_BUY));
-            });
+            var response = investClient.sellMarket(user, figi, currentPrice).join();
+            if (response != null) {
+                priceService.processNewOperation(user, figi, takeProfit, currentPrice, stopLoss, OrderDirection.ORDER_DIRECTION_SELL);
+                lastBoughtByUser.put(user, now);
+            }
         }
     }
 
@@ -139,6 +154,9 @@ public class ApplicationService {
             throw new IllegalArgumentException("Не получилось найти пользователя с accountId = " + accountId);
         }
         User user = optionalUser.get();
+        if (user.mode() == UserMode.ANALYZE) {
+            throw new IllegalArgumentException("В режиме анализа нельзя подписаться на стакан, свечи и последние цены");
+        }
         MarketSubscriber subscriber = new MarketSubscriber(this, user);
         if (user.strategy() instanceof OrderBookStrategy) {
             orderBookSubscriberByUser.computeIfAbsent(user, u -> {
@@ -187,14 +205,18 @@ public class ApplicationService {
     }
 
     private boolean canMakeOperationNow(User user, BigDecimal price, String figi) {
-        var alreadySpent = portfolioService.getSpent(user);
+        return canMakeOperationNow(user, Instant.now(), price, figi);
+    }
+
+    private boolean canMakeOperationNow(User user, Instant now, BigDecimal price, String figi) {
+        var alreadySpent = priceService.getBalance(user);
         var priceInRubles = priceService.getPriceInRubles(user, price, figi);
         var newBalance = alreadySpent.add(priceInRubles);
         if (newBalance.compareTo(user.maxBalance()) > 0) {
             log.warn("Недостаточно средств для операции, требуется {} RUB, а осталось {} RUB", priceInRubles, user.maxBalance().subtract(alreadySpent));
             return false;
         }
-        return (lastBought == null || lastBought.plusSeconds(OPERATIONS_PERIOD_SECONDS).isBefore(LocalDateTime.now()));
+        return !lastBoughtByUser.containsKey(user) || lastBoughtByUser.get(user).plusSeconds(OPERATIONS_PERIOD_SECONDS).isBefore(now);
     }
 
     public void sellAll(String accountId) {

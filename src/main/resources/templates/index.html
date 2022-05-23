@@ -7,7 +7,6 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Ubuntu:wght@100;400;500&display=swap" rel="stylesheet">
     <link th:href="@{/css/style.css}" rel="stylesheet"/>
-    <script type="text/javascript" th:src="@{/js/script.js}"></script>
 </head>
 <body>
 <aside>
@@ -33,6 +32,47 @@
                     <td th:text="${frontService.getInstrument(user, figi).getCurrency().toUpperCase()}"/>
                 </tr>
             </table>
+        </div>
+        <div class="card">
+            <h4>Стратегия</h4>
+            <p th:text="'Максимальное количество денег, которое может потратить бот: ' + ${user.maxBalance()} + ' рублей'"></p>
+            <table>
+                <tr>
+                    <th>Название параметра</th>
+                    <th>Значение параметра</th>
+                </tr>
+                <tr th:each="parameter : ${user.strategy().getUIAttributes()}">
+                    <td th:text="${parameter.key}"/>
+                    <td th:text="${parameter.value}"/>
+                </tr>
+            </table>
+        </div>
+        <div class="card" th:style="'display: ' + (${user.mode().toString() == 'ANALYZE'} ? 'block' : 'none')">
+            <h4> Просумулировать стратегию </h4>
+            <form action="/simulate" method="post">
+                <input type="hidden" name="accountId" th:value="${user.accountId()}">
+                <label>
+                    От
+                    <input type="datetime-local" name="from" required>
+                </label>
+                <label>
+                    До
+                    <input type="datetime-local" name="to" required>
+                </label>
+                <select name="interval">
+                    <option value="CANDLE_INTERVAL_1_MIN"> 1 минута</option>
+                    <option value="CANDLE_INTERVAL_5_MIN"> 5 минут</option>
+                    <option value="CANDLE_INTERVAL_15_MIN"> 15 минут</option>
+                    <option value="CANDLE_INTERVAL_HOUR"> 1 час</option>
+                    <option value="CANDLE_INTERVAL_DAY"> 1 день</option>
+                </select>
+                <button>Просиммулировать</button>
+            </form>
+        </div>
+        <div class="card">
+            <h4 th:text="${user.mode().toString() == 'ANALYZE'} ? 'Результаты последней симуляции' : 'Текущие результаты стратегии'"/>
+            <p th:text="'Заработано: ' + ${frontService.printBenefits(user)}"/>
+            <p th:text="'Потрачено: ' + ${frontService.getBalance(user).doubleValue()} + ' RUB'"/>
             <table>
                 <tr>
                     <th>Название</th>
@@ -49,26 +89,7 @@
                     <td th:text="${frontService.lastPriceToString(user, position.value, position.key)}"/>
                 </tr>
             </table>
-        </div>
-        <div class="card">
-            <h4>Стратегия</h4>
-            <p th:text="'Максимальное количество денег, которое может потратить бот: ' + ${user.maxBalance()} + ' рублей'"></p>
-            <table>
-                <tr>
-                    <th>Название параметра</th>
-                    <th>Значение параметра</th>
-                </tr>
-                <tr th:each="parameter : ${user.strategy().getUIAttributes()}">
-                    <td th:text="${parameter.key}"/>
-                    <td th:text="${parameter.value}"/>
-                </tr>
-            </table>
-        </div>
-        <div class="card">
-            <h4> Текущие результаты стратегии </h4>
-            <p th:text="'Заработано: ' + ${frontService.printBenefits(user)}"/>
-            <p th:text="'Стоимость портфеля: ' + ${frontService.getBalance(user).doubleValue()} + ' RUB'"/>
-            <table>
+            <table id="operations">
                 <tr>
                     <th>Название</th>
                     <th>Figi</th>
@@ -84,7 +105,8 @@
                     <td th:text="${frontService.moneyValueToString(user, operation.figi, operation.getPayment())}"/>
                 </tr>
             </table>
-            <form action="/sell-all" method="post">
+            <form action="/sell-all" method="post"
+                  th:style="'display: ' + (${user.mode().toString() == 'ANALYZE'} ? 'none' : 'block')">
                 <input type="hidden" name="accountId" th:value="${user.accountId()}">
                 <div class="tooltip">
                     <button>
@@ -94,7 +116,7 @@
                 </div>
             </form>
             <form th:action="${!frontService.isActive(user)} ? '/strategy/enable' : '/strategy/disable'"
-                  method="post">
+                  method="post" th:style="'display: ' + (${user.mode().toString() == 'ANALYZE'} ? 'none' : 'block')">
                 <input type="hidden" name="accountId" th:value="${user.accountId()}">
                 <div class="tooltip">
                     <button>

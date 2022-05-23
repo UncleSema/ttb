@@ -5,7 +5,7 @@ import org.springframework.stereotype.Service;
 import ru.tinkoff.piapi.contract.v1.OrderDirection;
 import ru.tinkoff.piapi.contract.v1.OrderTrade;
 import ru.tinkoff.piapi.contract.v1.OrderTrades;
-import ru.unclesema.ttb.User;
+import ru.unclesema.ttb.model.User;
 import ru.unclesema.ttb.utility.Utility;
 
 import java.math.BigDecimal;
