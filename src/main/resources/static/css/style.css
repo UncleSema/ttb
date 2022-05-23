@@ -179,9 +179,3 @@ td input {
     margin-top: 0;
     margin-bottom: 5px;
 }
-
-#operations {
-    max-height: 660px;
-    overflow: scroll;
-    display: block;
-}

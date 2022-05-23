@@ -43,11 +43,6 @@ public class OrderBookStrategyImpl implements OrderBookStrategy {
     }
 
     @Override
-    public String getDescription() {
-        return "Стратегия, которая использует стакан";
-    }
-
-    @Override
     public Map<String, Object> getUIAttributes() {
         return Map.of("takeProfit", takeProfit, "stopLoss", stopLoss, "asksBidsRatio", asksBidsRatio);
     }

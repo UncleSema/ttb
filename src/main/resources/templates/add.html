@@ -82,7 +82,8 @@
                     <span>Выберите стратегию:</span>
                     <br>
                     <select id="strategy-select" onchange="onSelectChanged(this)">
-                        <option th:each="s : ${frontService.getAvailableStrategies()}" th:text="${s.getName()}"></option>
+                        <option th:each="s : ${frontService.getAvailableStrategies()}"
+                                th:text="${s.getName()}"></option>
                     </select>
                 </label>
                 <span>Параметры стратегии</span>
@@ -113,14 +114,22 @@
                 <span>Figi, за которыми будет следить бот</span>
                 <div id="figi-list">
                 </div>
-                <button type="button" onclick="addFigiField()">Добавить поле</button>
+                <div class="tooltip">
+                    <button type="button" onclick="addFigiField()">
+                        <span class="tip">Добавить ещё одно поле для figi</span>
+                        Добавить поле
+                    </button>
+                </div>
                 <input type="hidden" name="figis" id="figis">
             </fieldset>
             <fieldset class="card">
                 <h4>Отправка настроек</h4>
                 <p>Убедитесь, что всё заполнили верно. Бот будет запущен, только после того как Вы нажмёте `Запустить`
                     на странице пользователя, после его создания</p>
-                <button>Отправить</button>
+                <div class="tooltip">
+                    <span class="tip">Отправить запрос на создание нового пользователя</span>
+                    <button>Отправить</button>
+                </div>
             </fieldset>
         </form>
     </div>

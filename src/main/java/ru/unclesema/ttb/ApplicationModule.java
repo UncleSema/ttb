@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.google.protobuf.Descriptors;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
-import ru.unclesema.ttb.service.ApplicationService;
 import ru.unclesema.ttb.strategy.CandleStrategy;
 import ru.unclesema.ttb.strategy.Strategy;
 import ru.unclesema.ttb.strategy.orderbook.OrderBookStrategyImpl;
@@ -17,11 +16,6 @@ import java.util.List;
 
 @Component
 public class ApplicationModule {
-    @Bean
-    public TradesSubscriber getTradesSubscriber(ApplicationService service) {
-        return new TradesSubscriber(service);
-    }
-
     @Bean
     public ObjectMapper objectMapper() {
         SimpleModule module = new SimpleModule();
@@ -41,6 +35,9 @@ public class ApplicationModule {
 
     @Bean
     public List<CandleStrategy> availableCandleStrategies(List<Strategy> availableStrategies) {
-        return availableStrategies.stream().filter(s -> s instanceof CandleStrategy).map(s -> (CandleStrategy) s).toList();
+        return availableStrategies.stream()
+                .filter(CandleStrategy.class::isInstance)
+                .map(CandleStrategy.class::cast)
+                .toList();
     }
 }

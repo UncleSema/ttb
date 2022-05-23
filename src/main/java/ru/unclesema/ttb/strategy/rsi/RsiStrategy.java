@@ -15,6 +15,17 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Реализация стратегии, основанной на подсчёте <code>RSI</code>.
+ * <p>
+ * Стратегия использует следущие параметры:
+ *     <ul>
+ *         <li> rsiPeriod — период, за который считается RSI </li>
+ *         <li> upperRsiThreshold — верхняя граница RSI (в %), сигнализирующая поход в long </li>
+ *         <li> lowerRsiThreshold — нижняя граница RSI (в %), сигнализирующая поход в short </li>
+ *     </ul>
+ * </p>
+ */
 @AllArgsConstructor
 @NoArgsConstructor
 @Getter

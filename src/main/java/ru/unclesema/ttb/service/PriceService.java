@@ -4,6 +4,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.tinkoff.piapi.contract.v1.LastPrice;
+import ru.tinkoff.piapi.contract.v1.Operation;
+import ru.tinkoff.piapi.contract.v1.OperationType;
 import ru.tinkoff.piapi.contract.v1.OrderDirection;
 import ru.unclesema.ttb.client.InvestClient;
 import ru.unclesema.ttb.model.User;
@@ -11,11 +13,16 @@ import ru.unclesema.ttb.model.UserMode;
 import ru.unclesema.ttb.utility.Utility;
 
 import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
+/**
+ * Сервис, отвечающий за работу с балансом / последними ценами / stop запросами
+ */
 @Service
 @RequiredArgsConstructor
 @Slf4j
@@ -27,6 +34,9 @@ public class PriceService {
     private final Map<String, Queue<StopRequest>> openStopRequests = new ConcurrentHashMap<>();
     private final Map<User, BigDecimal> spentByUser = new ConcurrentHashMap<>();
 
+    /**
+     * Метод ищет последнюю цену среди добавленных (если не находит, отправляет запрос к api).
+     */
     public BigDecimal getLastPrice(User user, String figi) {
         if (figi.equalsIgnoreCase("FG0000000000")) {
             return BigDecimal.ONE;
@@ -41,36 +51,58 @@ public class PriceService {
         return client.loadLastPrice(user, figi).join();
     }
 
+    /**
+     * Метод находит все инструменты, которые ещё не были проданы
+     *
+     * <p>Метод смотрит на последние операции пользователя, храня <code>Map</code> и прибавляя 1 к инструменту, в случае покупки, и вычитая 1 иначе.</p>
+     * <p>
+     * Другие возможные реализации:
+     * <ul>
+     *     <li> Portfolio, метод будет делать запрос к api, кэшируя его. Такая реализация не очень хороша из-за `несинхронизованности` с операциями,
+     *     которые используются в UI. </li>
+     *     <li> LastTrades, сервис подпишется на LastTrades, по которым будет считать оставшиеся инструменты. Такая реализация не очень хороша,
+     *     из-за того, что подписаться на LastTrades можно только при торговле на бирже</li>
+     * </ul>
+     * </p>
+     */
+    public Map<String, Long> getRemainingInstruments(User user) {
+        List<Operation> operations = client.getOperations(user);
+        Map<String, Long> remainingInstruments = new HashMap<>();
+        for (Operation op : operations) {
+            if (op.getInstrumentType().equalsIgnoreCase("currency")) continue;
+            if (op.getOperationType() == OperationType.OPERATION_TYPE_BUY) {
+                remainingInstruments.merge(op.getFigi(), op.getQuantity(), Long::sum);
+            } else if (op.getOperationType() == OperationType.OPERATION_TYPE_SELL) {
+                Long cur = remainingInstruments.getOrDefault(op.getFigi(), 0L);
+                if (cur == op.getQuantity()) {
+                    remainingInstruments.remove(op.getFigi());
+                } else {
+                    remainingInstruments.put(op.getFigi(), cur - op.getQuantity());
+                }
+            } else if (op.getOperationType() != OperationType.OPERATION_TYPE_BROKER_FEE) {
+                log.error("Неизвестный тип операции: {}", op);
+            }
+        }
+        return remainingInstruments;
+    }
+
     public void addLastPrice(LastPrice price) {
         lastPriceByFigi.put(price.getFigi(), Utility.toBigDecimal(price.getPrice()));
         checkStopRequests(price);
     }
 
-    public BigDecimal getBalance(User user) {
-        return spentByUser.getOrDefault(user, BigDecimal.ZERO);
-    }
-
-    private void addToBalance(User user, BigDecimal price) {
-        spentByUser.merge(user, price, BigDecimal::add);
-    }
-
-    private void subtractFromBalance(User user, BigDecimal price) {
-        spentByUser.merge(user, price, BigDecimal::subtract);
-    }
-
+    /**
+     * Метод обрабатывает новую операцию и добавляет стоп запросы
+     */
     public void processNewOperation(User user, String figi, BigDecimal takeProfit, BigDecimal price, BigDecimal stopLoss, OrderDirection direction) {
         var stopRequestDirection = direction == OrderDirection.ORDER_DIRECTION_BUY ? OrderDirection.ORDER_DIRECTION_SELL : OrderDirection.ORDER_DIRECTION_BUY;
         addStopRequest(new StopRequest(user, figi, takeProfit, stopLoss, stopRequestDirection));
         addToBalance(user, getPriceInRubles(user, price, figi));
     }
 
-    public void addStopRequest(StopRequest request) {
-        if (!openStopRequests.containsKey(request.figi())) {
-            openStopRequests.put(request.figi(), new ConcurrentLinkedQueue<>());
-        }
-        openStopRequests.get(request.figi()).add(request);
-    }
-
+    /**
+     * Метод перебирает все стоп запросы, выставляя на биржу нужные.
+     */
     public void checkStopRequests(LastPrice price) {
         if (!openStopRequests.containsKey(price.getFigi())) return;
         var requests = openStopRequests.get(price.getFigi());
@@ -135,6 +167,25 @@ public class PriceService {
         }
         BigDecimal lastCurrencyPrice = getLastPrice(user, optionalCurrency.get().getFigi());
         return lastCurrencyPrice.multiply(price);
+    }
+
+    public BigDecimal getBalance(User user) {
+        return spentByUser.getOrDefault(user, BigDecimal.ZERO);
+    }
+
+    private void addStopRequest(StopRequest request) {
+        if (!openStopRequests.containsKey(request.figi())) {
+            openStopRequests.put(request.figi(), new ConcurrentLinkedQueue<>());
+        }
+        openStopRequests.get(request.figi()).add(request);
+    }
+
+    private void addToBalance(User user, BigDecimal price) {
+        spentByUser.merge(user, price, BigDecimal::add);
+    }
+
+    private void subtractFromBalance(User user, BigDecimal price) {
+        spentByUser.merge(user, price, BigDecimal::subtract);
     }
 }
 

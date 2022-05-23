@@ -46,12 +46,15 @@ public class Utility {
         return Instant.ofEpochSecond(ts.getSeconds(), ts.getNanos());
     }
 
-    public static Instant instantPlusCandleInterval(Instant instant, CandleInterval interval) {
+    /**
+     * Метод находит самую далёкую дату <code>to</code>, такую что промужуток с <code>from</code> по <code>to</code>
+     * возможно запросить для получения исторических свечей.
+     */
+    public static Instant instantPlusCandleInterval(Instant from, CandleInterval interval) {
         return switch (interval) {
-            case CANDLE_INTERVAL_1_MIN, CANDLE_INTERVAL_15_MIN, CANDLE_INTERVAL_5_MIN ->
-                    instant.plus(1, ChronoUnit.DAYS);
-            case CANDLE_INTERVAL_HOUR -> instant.plus(7, ChronoUnit.DAYS);
-            case CANDLE_INTERVAL_DAY -> instant.plus(365, ChronoUnit.DAYS);
+            case CANDLE_INTERVAL_1_MIN, CANDLE_INTERVAL_15_MIN, CANDLE_INTERVAL_5_MIN -> from.plus(1, ChronoUnit.DAYS);
+            case CANDLE_INTERVAL_HOUR -> from.plus(7, ChronoUnit.DAYS);
+            case CANDLE_INTERVAL_DAY -> from.plus(365, ChronoUnit.DAYS);
             default -> null;
         };
     }

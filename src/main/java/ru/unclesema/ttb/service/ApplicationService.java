@@ -27,7 +27,6 @@ import java.util.Optional;
 @Service
 @Slf4j
 public class ApplicationService {
-    private final PortfolioService portfolioService;
     private final InvestClient investClient;
     private final UserService userService;
     private final PriceService priceService;
@@ -41,23 +40,36 @@ public class ApplicationService {
     private final Map<User, MarketSubscriber> lastPricesSubscriberByUser = new HashMap<>();
     private final Map<User, Instant> lastBoughtByUser = new HashMap<>();
 
+    /**
+     * Метод обрабатывает запрос о новом пользователе, обрабатывая ошибки:
+     * <ul>
+     *     <li>Параметры стратегии, пришедшие с UI, должны содержать имя стратегии</li>
+     *     <li>Стратегия с заданным именем должна существовать</li>
+     *     <li>Токен пользователя не должен быть пустым</li>
+     *     <li>Если <code>mode == MARKET</code>, то accountId не должен быть пустым </li>
+     *     <li>Пользователя с заданным accountId не должно существовать</li>
+     * </ul>
+     */
     public User addNewUser(NewUserRequest request) {
-        Map<String, String> strategyParameters = request.getStrategyParameters();
+        var strategyParameters = request.getStrategyParameters();
         if (!strategyParameters.containsKey("name")) {
             throw new IllegalArgumentException("Пропущено имя стратегии");
         }
-        String name = strategyParameters.get("name");
+        var name = strategyParameters.get("name");
         strategyParameters.remove("name");
-        Optional<Strategy> strategyOptional = availableStrategies.stream().filter(s -> s.getName().equals(name)).findAny();
+        var strategyOptional = availableStrategies.stream().filter(s -> s.getName().equals(name)).findAny();
         if (strategyOptional.isEmpty()) {
             throw new IllegalArgumentException("Стратегия `" + name + "` не найдена");
         }
         if (request.getToken() == null || request.getToken().isBlank()) {
             throw new IllegalArgumentException("Токен пользователя не может быть пустым");
         }
-        Class<? extends Strategy> strategyClazz = strategyOptional.get().getClass();
-        Strategy strategy = objectMapper.convertValue(strategyParameters, strategyClazz);
-        request.getFigis().removeIf(String::isBlank);
+        var strategyClazz = strategyOptional.get().getClass();
+        var strategy = objectMapper.convertValue(strategyParameters, strategyClazz);
+        var figis = request.getFigis().stream()
+                .distinct()
+                .filter(figi -> !figi.isBlank())
+                .toList();
         if (request.getMode() == UserMode.MARKET) {
             if (request.getAccountId().isBlank()) {
                 throw new IllegalArgumentException("Для режима реальной торговли необходимо указать accountId");
@@ -66,12 +78,15 @@ public class ApplicationService {
                 throw new IllegalArgumentException("Пользователь с accountId = " + request.getAccountId() + " уже существует");
             }
         }
-        String accountId = investClient.addUser(request.getToken(), request.getAccountId(), request.getMode());
-        User user = new User(request.getToken(), request.getMode(), request.getMaxBalance(), accountId, request.getFigis(), strategy);
+        var accountId = investClient.addUser(request.getToken(), request.getAccountId(), request.getMode());
+        var user = new User(request.getToken(), request.getMode(), request.getMaxBalance(), accountId, figis, strategy);
         userService.addUser(user);
         return user;
     }
 
+    /**
+     * Метод добавляет информацию о новом стакане, о чём оповещает все стратегии, использующие стаканы.
+     */
     public void addOrderBook(OrderBook orderBook) {
         for (User user : userService.getActiveOrderBookUsers()) {
             OrderBookStrategy strategy = (OrderBookStrategy) user.strategy();
@@ -84,6 +99,9 @@ public class ApplicationService {
         }
     }
 
+    /**
+     * Метод добавляет информацию о новой свече, о чём оповещает все стратегии, использующие свечи.
+     */
     public void addCandle(Candle candle) {
         for (User user : userService.getActiveCandleUsers()) {
             CandleStrategy strategy = (CandleStrategy) user.strategy();
@@ -96,10 +114,13 @@ public class ApplicationService {
         }
     }
 
+    /**
+     * Метод симулирует работу стратегию на заданном временном промежутке.
+     */
     public void simulate(User user, Instant from, Instant to, CandleInterval interval) {
         log.info("Запрос просимулировать стратегию для {} с {} по {} с интервалом {}", user, from, to, interval);
         if (user.mode() != UserMode.ANALYZE) {
-            throw new IllegalArgumentException("Используйте `ANALYZE` режим, чтобы симулировать работу стратегии");
+            throw new IllegalArgumentException("Используйте режим ANALYZE, чтобы симулировать работу стратегии");
         }
         if (!(user.strategy() instanceof CandleStrategy strategy)) {
             throw new UnsupportedOperationException("Чтобы просимулировать на исторических данных работу стратегии, она должна реализовывать CandleStrategy интерфейс");
@@ -120,6 +141,9 @@ public class ApplicationService {
         priceService.deleteRequestsForUser(user);
     }
 
+    /**
+     * Метод обрабатывает решение стратегии, в зависимости от которого покупает / продает выбранную бумагу; выставляет takeProfit, stopLoss.
+     */
     private void processStrategyDecision(User user, String figi, Instant now, BigDecimal currentPrice, StrategyDecision decision) {
         if (decision == StrategyDecision.NOTHING) return;
         boolean isBuy = decision == StrategyDecision.BUY;
@@ -147,6 +171,14 @@ public class ApplicationService {
         }
     }
 
+    /**
+     * Подписывает пользователя на:
+     * <ul>
+     *     <li>Последние цены на выбранные инструменты</li>
+     *     <li>Последний стакан, если стратегия использует стакан</li>
+     *     <li>Последние свечи, если стратегия использует свечи</li>
+     * </ul>
+     */
     public void enableStrategyForUser(String accountId) {
         log.info("Запрос на включение стратегии от пользователя с accountId = {}", accountId);
         Optional<User> optionalUser = userService.getAllUsers().stream().filter(u -> u.accountId().equals(accountId)).findAny();
@@ -157,57 +189,65 @@ public class ApplicationService {
         if (user.mode() == UserMode.ANALYZE) {
             throw new IllegalArgumentException("В режиме анализа нельзя подписаться на стакан, свечи и последние цены");
         }
-        MarketSubscriber subscriber = new MarketSubscriber(this, user);
+        MarketSubscriber subscriber = new MarketSubscriber(this);
         if (user.strategy() instanceof OrderBookStrategy) {
             orderBookSubscriberByUser.computeIfAbsent(user, u -> {
-                investClient.subscribeMarket(subscriber, InvestClient.InstrumentType.ORDER_BOOK);
+                investClient.subscribe(user, subscriber, InvestClient.InstrumentType.ORDER_BOOK);
                 return subscriber;
             });
         }
         if (user.strategy() instanceof CandleStrategy) {
             candlesSubscriberByUser.computeIfAbsent(user, u -> {
-                investClient.subscribeMarket(subscriber, InvestClient.InstrumentType.CANDLE);
+                investClient.subscribe(user, subscriber, InvestClient.InstrumentType.CANDLE);
                 return subscriber;
             });
         }
         userService.makeUserActive(user);
         lastPricesSubscriberByUser.computeIfAbsent(user, u -> {
-            investClient.subscribeMarket(subscriber, InvestClient.InstrumentType.LAST_PRICE);
+            investClient.subscribe(user, subscriber, InvestClient.InstrumentType.LAST_PRICE);
             return subscriber;
-        });
-        investClient.subscribeTrades(user, response -> {
-            if (response.hasOrderTrades()) {
-                addOrderTrades(response.getOrderTrades());
-            }
         });
     }
 
+    /**
+     * Метод отменяет все подписки пользователя, делает его `неактивным`.
+     */
     public void disableStrategyForUser(String accountId) {
         log.info("Запрос на выключение стратегии от пользователя с accountId = {}", accountId);
         var user = userService.findUserByAccountId(accountId);
         if (orderBookSubscriberByUser.containsKey(user)) {
-            investClient.unsubscribe(orderBookSubscriberByUser.get(user), InvestClient.InstrumentType.ORDER_BOOK);
+            investClient.unsubscribe(user, InvestClient.InstrumentType.ORDER_BOOK);
             orderBookSubscriberByUser.remove(user);
         }
         if (candlesSubscriberByUser.containsKey(user)) {
-            investClient.unsubscribe(candlesSubscriberByUser.get(user), InvestClient.InstrumentType.CANDLE);
+            investClient.unsubscribe(user, InvestClient.InstrumentType.CANDLE);
             candlesSubscriberByUser.remove(user);
         }
         if (lastPricesSubscriberByUser.containsKey(user)) {
-            investClient.unsubscribe(lastPricesSubscriberByUser.get(user), InvestClient.InstrumentType.LAST_PRICE);
+            investClient.unsubscribe(user, InvestClient.InstrumentType.LAST_PRICE);
             lastPricesSubscriberByUser.remove(user);
         }
         userService.makeUserInactive(user);
     }
 
+    /**
+     * Добавление последней цены
+     */
     public void addLastPrice(LastPrice lastPrice) {
         priceService.addLastPrice(lastPrice);
     }
 
-    private boolean canMakeOperationNow(User user, BigDecimal price, String figi) {
-        return canMakeOperationNow(user, Instant.now(), price, figi);
-    }
-
+    /**
+     * Проверка на то, что стратегия заданного пользователя может провести операцию по заданной бумаге.
+     *
+     * <p>
+     * На данный момент есть два критерия возможности проведения операции для пользователя:
+     *     <ul>
+     *         <li>Время, т.е. пользователь может совершать операции не чаще чем раз в <code>OPERATIONS_PERIOD_SECONDS</code></li>
+     *         <li>Бюджет пользователя: стратегия не может превысить выставленный пользователем лимит</li>
+     *    </ul>
+     * </p>
+     */
     private boolean canMakeOperationNow(User user, Instant now, BigDecimal price, String figi) {
         var alreadySpent = priceService.getBalance(user);
         var priceInRubles = priceService.getPriceInRubles(user, price, figi);
@@ -219,19 +259,33 @@ public class ApplicationService {
         return !lastBoughtByUser.containsKey(user) || lastBoughtByUser.get(user).plusSeconds(OPERATIONS_PERIOD_SECONDS).isBefore(now);
     }
 
+    /**
+     * Проверка на то, что стратегия заданного пользователя может провести операцию по заданной бумаге.
+     *
+     * <p>
+     * На данный момент есть два критерия возможности проведения операции для пользователя:
+     *     <ul>
+     *         <li>Время, т.е. пользователь может совершать операции не чаще чем раз в <code>OPERATIONS_PERIOD_SECONDS</code></li>
+     *         <li>Бюджет пользователя: стратегия не может превысить выставленный пользователем лимит</li>
+     *    </ul>
+     * </p>
+     */
+    private boolean canMakeOperationNow(User user, BigDecimal price, String figi) {
+        return canMakeOperationNow(user, Instant.now(), price, figi);
+    }
+
+    /**
+     * Продажа всех ценных бумаг пользователя, которые были накоплены стратегией.
+     */
     public void sellAll(String accountId) {
         log.info("Запрос на продажу всех активов {}", accountId);
         var user = userService.findUserByAccountId(accountId);
         priceService.deleteRequestsForUser(user);
-        portfolioService.getRemaining(user).forEach((figi, quantity) -> {
-            if (figi.equalsIgnoreCase("FG0000000000") && !investClient.getInstrument(user, figi).getInstrumentType().equalsIgnoreCase("currency")) {
+        priceService.getRemainingInstruments(user).forEach((figi, quantity) -> {
+            var instrument = investClient.getInstrument(user, figi);
+            if (!instrument.getInstrumentType().equalsIgnoreCase("currency")) {
                 investClient.sellMarket(user, figi, quantity, priceService.getLastPrice(user, figi)).join();
             }
         });
-    }
-
-    public void addOrderTrades(OrderTrades orderTrades) {
-        var user = userService.findUserByAccountId(orderTrades.getAccountId());
-        portfolioService.addOrderTrades(user, orderTrades);
     }
 }

@@ -3,12 +3,10 @@ package ru.unclesema.ttb;
 import lombok.extern.slf4j.Slf4j;
 import ru.tinkoff.piapi.contract.v1.MarketDataResponse;
 import ru.tinkoff.piapi.core.stream.StreamProcessor;
-import ru.unclesema.ttb.model.User;
 import ru.unclesema.ttb.service.ApplicationService;
 
 @Slf4j
-public record MarketSubscriber(ApplicationService service, User user) implements StreamProcessor<MarketDataResponse> {
-
+public record MarketSubscriber(ApplicationService service) implements StreamProcessor<MarketDataResponse> {
     @Override
     public void process(MarketDataResponse response) {
         if (response.hasOrderbook()) {

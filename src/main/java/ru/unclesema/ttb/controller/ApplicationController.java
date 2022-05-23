@@ -25,29 +25,19 @@ public class ApplicationController {
 
     @GetMapping("/")
     public ModelAndView index(ModelMap model) {
-//        try {
         model.addAttribute("newUserRequest", new NewUserRequest());
         model.addAttribute("frontService", frontService);
         return new ModelAndView("add", model);
-//        } catch (Exception e) {
-//            model.addAttribute(e);
-//            return new ModelAndView("redirect:/app-error", model);
-//        }
     }
 
     @GetMapping("/{accountId}")
     public ModelAndView index(@PathVariable String accountId, ModelMap model) {
-//        try {
         if (frontService.contains(accountId)) {
             model.addAttribute("frontService", frontService);
             model.addAttribute(frontService.findUser(accountId));
             return new ModelAndView("index", model);
         }
         return new ModelAndView("redirect:/", model);
-//        } catch (Exception e) {
-//            model.addAttribute(e);
-//            return new ModelAndView("redirect:/app-error", model);
-//        }
     }
 
     @PostMapping("/simulate")
@@ -58,13 +48,7 @@ public class ApplicationController {
 
     @PostMapping("/user")
     public String addNewUser(NewUserRequest request) {
-//        try {
         User user = service.addNewUser(request);
-//        } catch (Exception e) {
-//            System.err.println(e);
-//            model.addAttribute(e);
-//            return new ModelAndView("redirect:/app-error", model);
-//        }
         return "redirect:/" + user.accountId();
     }
 
