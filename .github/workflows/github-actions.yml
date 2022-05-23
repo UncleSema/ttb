@@ -26,9 +26,11 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: TinkoffTradeBot
+      - name: Temp
+        run: ls .
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
           draft: true
           files: |
-            TinkoffTradeBot-1.0.jar
+            TinkoffTradeBot.jar
