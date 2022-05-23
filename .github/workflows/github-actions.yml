@@ -15,7 +15,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: TinkoffTradeBot
-          path: build/libs/TinkoffTradeBot-1.0-SNAPSHOT.jar
+          path: build/libs/TinkoffTradeBot-1.0.jar
 
   release:
     runs-on: ubuntu-latest
