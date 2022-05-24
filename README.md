@@ -102,7 +102,7 @@
 для него стратегию. Для этого нужно запустить приложение с параметрами вида:
 
 ```
-java -jar TinkoffTradeBot.jar \
+java -jar TinkoffTradeBotfather.jar \
 --user.token=<TOKEN> \
 --user.mode=<MODE> \
 --user.account-id=<ACCOUNT_ID> \
@@ -116,7 +116,7 @@ java -jar TinkoffTradeBot.jar \
 Пример правильной команды:
 
 ```
-java -jar TinkoffTradeBot.jar \
+java -jar TinkoffTradeBotfather.jar \
 --user.token='t.123' \
 --user.mode='SANDBOX' \
 --user.figis="BBG004730N88,BBG004730RP0" \
