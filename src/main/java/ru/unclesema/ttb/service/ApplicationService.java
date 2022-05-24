@@ -77,7 +77,7 @@ public class ApplicationService {
                 .filter(figi -> !figi.isBlank())
                 .toList();
         if (request.getMode() == UserMode.MARKET) {
-            if (request.getAccountId().isBlank()) {
+            if (request.getAccountId() == null || request.getAccountId().isBlank()) {
                 throw new IllegalArgumentException("Для режима реальной торговли необходимо указать accountId");
             }
             if (userService.contains(request.getAccountId())) {

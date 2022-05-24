@@ -18,13 +18,4 @@ public class NewUserRequest {
     private String accountId;
     private List<String> figis;
     private Map<String, String> strategyParameters;
-
-    public NewUserRequest of(StartupRequest request) {
-        return new NewUserRequest(request.getToken(),
-                request.getMode(),
-                request.getMaxBalance(),
-                request.getAccountId(),
-                request.getFigis(),
-                request.getStrategyParameters());
-    }
 }
