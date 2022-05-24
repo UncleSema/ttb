@@ -1,16 +1,11 @@
 user:
   token: ''
-  mode: analyze
-  account-id: ''
-  strategy-enable: false
+  mode: sandbox
+  max-balance: 3000
   figis:
-    - "BBG002NLDLV8"
-    - "BBG000BCGHH7"
-    - "BBG001KJ7WJ5"
-    - "BBG00KHRRDX3"
-    - "BBG006L8G4H1"
-    - "BBG00Y91R9T3"
-    - "BBG005DXJS36"
-  max-balance: 4000
+    - "BBG004730N88"
+    - "BBG004730RP0"
   strategy-parameters:
-    name: "RSI"
+    name: "Стакан"
+    takeProfit: 0.4
+  strategy-enable: true

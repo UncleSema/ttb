@@ -5,6 +5,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import ru.tinkoff.piapi.contract.v1.*;
+import ru.tinkoff.piapi.core.exception.ApiRuntimeException;
 import ru.unclesema.ttb.MarketSubscriber;
 import ru.unclesema.ttb.client.InvestClient;
 import ru.unclesema.ttb.model.NewUserRequest;
@@ -44,10 +45,11 @@ public class ApplicationService {
      * Метод обрабатывает запрос о новом пользователе, обрабатывая ошибки:
      * <ul>
      *     <li>Параметры стратегии, пришедшие с UI, должны содержать имя стратегии</li>
-     *     <li>Стратегия с заданным именем должна существовать</li>
+     *     <li>Стратегия с заданным именем должна существовать ровно одна</li>
      *     <li>Токен пользователя не должен быть пустым</li>
      *     <li>Если <code>mode == MARKET</code>, то accountId не должен быть пустым </li>
      *     <li>Пользователя с заданным accountId не должно существовать</li>
+     *     <li>Ошибки обращений к API</li>
      * </ul>
      */
     public User addNewUser(NewUserRequest request) {
@@ -57,6 +59,10 @@ public class ApplicationService {
         }
         var name = strategyParameters.get("name");
         strategyParameters.remove("name");
+        var strategyStream = availableStrategies.stream().filter(s -> s.getName().equals(name));
+        if (strategyStream.count() > 1) {
+            throw new IllegalStateException("Найдено несколько стратегий с именем `" + name + "`");
+        }
         var strategyOptional = availableStrategies.stream().filter(s -> s.getName().equals(name)).findAny();
         if (strategyOptional.isEmpty()) {
             throw new IllegalArgumentException("Стратегия `" + name + "` не найдена");
@@ -78,10 +84,19 @@ public class ApplicationService {
                 throw new IllegalArgumentException("Пользователь с accountId = " + request.getAccountId() + " уже существует");
             }
         }
-        var accountId = investClient.addUser(request.getToken(), request.getAccountId(), request.getMode());
-        var user = new User(request.getToken(), request.getMode(), request.getMaxBalance(), accountId, figis, strategy);
-        userService.addUser(user);
-        return user;
+        try {
+            var accountId = investClient.addUser(request.getToken(), request.getAccountId(), request.getMode());
+            var user = new User(request.getToken(), request.getMode(), request.getMaxBalance(), accountId, figis, strategy);
+            userService.addUser(user);
+            return user;
+        } catch (ApiRuntimeException e) {
+            if (Utility.checkExceptionCode(e, "70001")) {
+                log.error("Внутренняя ошибка Invest Api. Вы правильно указали токен?");
+            } else {
+                log.error("Неизвестная ошибка при создании пользователя", e);
+            }
+            throw e;
+        }
     }
 
     /**

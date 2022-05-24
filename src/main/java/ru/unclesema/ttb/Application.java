@@ -23,17 +23,20 @@ public class Application {
     @Autowired
     public ApplicationService service;
 
+    /**
+     * Обработка запроса о создании пользователя при старте (читайте подробнее в README)
+     */
     @PostConstruct
     public void startup() {
         log.info("Запрос полученный при старте {}", startupRequest);
-        if (startupRequest.isValid()) {
+        try {
             NewUserRequest request = new NewUserRequest(startupRequest.getToken(), startupRequest.getMode(), startupRequest.getMaxBalance(), startupRequest.getAccountId(), startupRequest.getFigis(), startupRequest.getStrategyParameters());
             User user = service.addNewUser(request);
             if (Boolean.TRUE.equals(startupRequest.getStrategyEnable())) {
                 service.enableStrategyForUser(user.accountId());
             }
-        } else {
-            log.info("Параметры запуска не найдены/не валидны, новый пользователь при запуске создан не будет");
+        } catch (Exception e) {
+            log.info("Не получилось создать пользователя при старте: {}", e.getMessage());
         }
     }
 

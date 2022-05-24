@@ -23,11 +23,4 @@ public class StartupRequest {
     private List<String> figis;
     private Map<String, String> strategyParameters;
     private Boolean strategyEnable;
-
-    public boolean isValid() {
-        return token != null && !token.isBlank() &&
-                mode != null && maxBalance != null &&
-                (mode != UserMode.MARKET || accountId != null) && figis != null &&
-                strategyParameters != null;
-    }
 }
