@@ -11,7 +11,7 @@ import ru.tinkoff.piapi.core.exception.ApiRuntimeException;
 import ru.unclesema.ttb.MarketSubscriber;
 import ru.unclesema.ttb.model.User;
 import ru.unclesema.ttb.model.UserMode;
-import ru.unclesema.ttb.service.AnalyzeService;
+import ru.unclesema.ttb.service.analyze.AnalyzeService;
 import ru.unclesema.ttb.utility.Utility;
 
 import java.math.BigDecimal;

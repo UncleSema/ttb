@@ -1,4 +1,4 @@
-package ru.unclesema.ttb.service;
+package ru.unclesema.ttb.service.price;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +10,7 @@ import ru.tinkoff.piapi.contract.v1.OrderDirection;
 import ru.unclesema.ttb.client.InvestClient;
 import ru.unclesema.ttb.model.User;
 import ru.unclesema.ttb.model.UserMode;
+import ru.unclesema.ttb.service.analyze.AnalyzeService;
 import ru.unclesema.ttb.utility.Utility;
 
 import java.math.BigDecimal;
@@ -26,7 +27,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class PriceService {
+public class PriceServiceImpl implements PriceService {
     private final InvestClient client;
     private final AnalyzeService analyzeService;
 
@@ -37,6 +38,7 @@ public class PriceService {
     /**
      * Метод ищет последнюю цену среди добавленных (если не находит, отправляет запрос к api).
      */
+    @Override
     public BigDecimal getLastPrice(User user, String figi) {
         if (figi.equalsIgnoreCase("FG0000000000")) {
             return BigDecimal.ONE;
@@ -65,6 +67,7 @@ public class PriceService {
      * </ul>
      * </p>
      */
+    @Override
     public Map<String, Long> getRemainingInstruments(User user) {
         List<Operation> operations = client.getOperations(user);
         Map<String, Long> remainingInstruments = new HashMap<>();
@@ -86,6 +89,10 @@ public class PriceService {
         return remainingInstruments;
     }
 
+    /**
+     * Добавить последнюю цену.
+     */
+    @Override
     public void addLastPrice(LastPrice price) {
         lastPriceByFigi.put(price.getFigi(), Utility.toBigDecimal(price.getPrice()));
         checkStopRequests(price);
@@ -94,6 +101,7 @@ public class PriceService {
     /**
      * Метод обрабатывает новую операцию и добавляет стоп запросы
      */
+    @Override
     public void processNewOperation(User user, String figi, BigDecimal takeProfit, BigDecimal price, BigDecimal stopLoss, OrderDirection direction) {
         var stopRequestDirection = direction == OrderDirection.ORDER_DIRECTION_BUY ? OrderDirection.ORDER_DIRECTION_SELL : OrderDirection.ORDER_DIRECTION_BUY;
         var instrument = client.getInstrument(user, figi);
@@ -104,6 +112,7 @@ public class PriceService {
     /**
      * Метод перебирает все стоп запросы, выставляя на биржу нужные.
      */
+    @Override
     public void checkStopRequests(LastPrice price) {
         if (!openStopRequests.containsKey(price.getFigi())) return;
         var requests = openStopRequests.get(price.getFigi());
@@ -111,7 +120,9 @@ public class PriceService {
         requests.removeIf(request -> {
             var user = request.user();
             var figi = request.figi();
+            var instrument = client.getInstrument(user, figi);
             if (request.direction() == OrderDirection.ORDER_DIRECTION_SELL) {
+                // Сработала стоп заявка для позиции в лонг
                 BigDecimal sellPrice;
                 if (request.takeProfit().compareTo(lastPrice) <= 0) {
                     sellPrice = request.takeProfit();
@@ -123,10 +134,11 @@ public class PriceService {
                 log.info("Сработала стоп-заяка для {}, продажа по цене {}", figi, sellPrice);
                 var response = client.sellMarket(user, figi, sellPrice).join();
                 if (response != null) {
-                    subtractFromBalance(user, getPriceInRubles(user, sellPrice, figi));
+                    subtractFromBalance(user, getPriceInRubles(user, sellPrice, figi).multiply(BigDecimal.valueOf(instrument.getLot())));
                 }
                 return response != null;
             } else if (request.direction() == OrderDirection.ORDER_DIRECTION_BUY) {
+                // Сработала стоп заявка для позиции в шорт
                 BigDecimal buyPrice;
                 if (request.takeProfit().compareTo(lastPrice) >= 0) {
                     buyPrice = request.takeProfit();
@@ -138,7 +150,7 @@ public class PriceService {
                 log.info("Сработала стоп-заяка для {}, покупка по цене {}", figi, buyPrice);
                 var response = client.buyMarket(user, figi, buyPrice).join();
                 if (response != null) {
-                    subtractFromBalance(user, getPriceInRubles(user, buyPrice, figi));
+                    subtractFromBalance(user, getPriceInRubles(user, buyPrice, figi).multiply(BigDecimal.valueOf(instrument.getLot())));
                 }
                 return response != null;
             }
@@ -146,6 +158,10 @@ public class PriceService {
         });
     }
 
+    /**
+     * Удаляет все стоп запросы для пользователя
+     */
+    @Override
     public void deleteRequestsForUser(User user) {
         log.info("Удаление всех запросов для пользователя {}", user);
         for (String figi : user.figis()) {
@@ -157,6 +173,10 @@ public class PriceService {
         }
     }
 
+    /**
+     * Переводит указанную цену в рубли
+     */
+    @Override
     public BigDecimal getPriceInRubles(User user, BigDecimal price, String figi) {
         String currency = client.getInstrument(user, figi).getCurrency();
         if (currency.equalsIgnoreCase("rub")) {
@@ -170,26 +190,39 @@ public class PriceService {
         return lastCurrencyPrice.multiply(price);
     }
 
+    /**
+     * Возвращает количество рублей, потраченных стратегией
+     */
+    @Override
     public BigDecimal getBalance(User user) {
         return spentByUser.getOrDefault(user, BigDecimal.ZERO);
     }
 
+    /**
+     * Добавляет указанное количество рублей к уже потраченным (нужно, чтобы стратегия не вышла за лимит, поставленный пользователем)
+     *
+     * <p>Используется, например, при покупке бумаги стратегией </p>
+     */
+    private void addToBalance(User user, BigDecimal price) {
+        spentByUser.merge(user, price, BigDecimal::add);
+    }
+
+    /**
+     * Возвращает потраченные деньги (нужно, чтобы стратегия не вышла за лимит, поставленный пользователем)
+     * <p>Используется, например, при продаже бумаги стратегией </p>
+     */
+    private void subtractFromBalance(User user, BigDecimal price) {
+        spentByUser.merge(user, price, BigDecimal::subtract);
+    }
+
+    /**
+     * Добавить новый стоп запрос
+     */
     private void addStopRequest(StopRequest request) {
         if (!openStopRequests.containsKey(request.figi())) {
             openStopRequests.put(request.figi(), new ConcurrentLinkedQueue<>());
         }
         openStopRequests.get(request.figi()).add(request);
     }
-
-    private void addToBalance(User user, BigDecimal price) {
-        spentByUser.merge(user, price, BigDecimal::add);
-    }
-
-    private void subtractFromBalance(User user, BigDecimal price) {
-        spentByUser.merge(user, price, BigDecimal::subtract);
-    }
-}
-
-record StopRequest(User user, String figi, BigDecimal takeProfit, BigDecimal stopLoss, OrderDirection direction) {
 }
 

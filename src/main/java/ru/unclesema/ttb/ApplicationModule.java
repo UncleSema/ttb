@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Component;
 import ru.unclesema.ttb.strategy.CandleStrategy;
 import ru.unclesema.ttb.strategy.Strategy;
-import ru.unclesema.ttb.strategy.orderbook.OrderBookStrategyImpl;
+import ru.unclesema.ttb.strategy.orderbook.AsksBidsStrategy;
 import ru.unclesema.ttb.strategy.rsi.RsiStrategy;
 
 import java.util.List;
@@ -30,7 +30,7 @@ public class ApplicationModule {
 
     @Bean
     public List<Strategy> availableStrategies() {
-        return List.of(new OrderBookStrategyImpl(), new RsiStrategy());
+        return List.of(new AsksBidsStrategy(), new RsiStrategy());
     }
 
     @Bean

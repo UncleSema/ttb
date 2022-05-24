@@ -25,6 +25,8 @@ import java.util.Map;
  *         <li> lowerRsiThreshold — нижняя граница RSI (в %), сигнализирующая поход в short </li>
  *     </ul>
  * </p>
+ *
+ * <p> Реализация взята из <a href="https://github.com/hondasmx/rsi_strategy"> репозитория на GitHub </a> </p>
  */
 @AllArgsConstructor
 @NoArgsConstructor

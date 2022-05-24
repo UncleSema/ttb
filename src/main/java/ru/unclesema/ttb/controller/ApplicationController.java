@@ -2,7 +2,6 @@ package ru.unclesema.ttb.controller;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.ui.ModelMap;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -68,11 +67,5 @@ public class ApplicationController {
     public String sellAll(String accountId) {
         service.sellAll(accountId);
         return "redirect:/" + accountId;
-    }
-
-    @GetMapping("/app-error")
-    public String exceptionHandler(Model model, Exception e) {
-        model.addAttribute("msg", e.getMessage());
-        return "error-page";
     }
 }

@@ -85,7 +85,7 @@
 3. Добавить уникальное имя стратегии, чтобы выбирать её через UI.
 
 Примеры
-стратегий: [на стакане](https://github.com/UncleSema/ttb/blob/main/src/main/java/ru/unclesema/ttb/strategy/orderbook/OrderBookStrategyImpl.java)
+стратегий: [на стакане](https://github.com/UncleSema/ttb/blob/main/src/main/java/ru/unclesema/ttb/strategy/orderbook/AsksBidsStrategy.java)
 ,
 [на свечах](https://github.com/UncleSema/ttb/blob/main/src/main/java/ru/unclesema/ttb/strategy/rsi/RsiStrategy.java).
 

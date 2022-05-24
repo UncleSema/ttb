@@ -1,4 +1,4 @@
-package ru.unclesema.ttb.service;
+package ru.unclesema.ttb.service.analyze;
 
 import com.google.protobuf.Timestamp;
 import org.springframework.stereotype.Service;
@@ -16,7 +16,7 @@ import java.util.Map;
  * Сервис, отвечающий за режим анализа.
  */
 @Service
-public class AnalyzeService {
+public class AnalyzeServiceImpl implements AnalyzeService {
     private final Map<User, List<Operation>> operations = new HashMap<>();
     private final Map<User, Map<String, LastPrice>> lastPriceByUser = new HashMap<>();
     private final Map<User, Timestamp> timeByUser = new HashMap<>();
@@ -24,6 +24,7 @@ public class AnalyzeService {
     /**
      * Метод добавляет новую операцию, совершенную во время симуляции работы стратегии
      */
+    @Override
     public void processOrder(User user, String figi, long quantity, BigDecimal price, OrderDirection direction) {
         OperationType operationType = (direction == OrderDirection.ORDER_DIRECTION_BUY ? OperationType.OPERATION_TYPE_BUY : OperationType.OPERATION_TYPE_SELL);
         operations.computeIfAbsent(user, u -> new ArrayList<>());
@@ -39,8 +40,9 @@ public class AnalyzeService {
     }
 
     /**
-     * @return Соверщенные стратегией операции
+     * @return Совершённые стратегией операции
      */
+    @Override
     public List<Operation> getOperations(User user) {
         return operations.getOrDefault(user, List.of());
     }
@@ -48,6 +50,7 @@ public class AnalyzeService {
     /**
      * @return Цену последней добавленной свечи
      */
+    @Override
     public LastPrice getLastPrice(User user, String figi) {
         return lastPriceByUser
                 .getOrDefault(user, Map.of())
@@ -57,6 +60,7 @@ public class AnalyzeService {
     /**
      * Метод добавляет новую свечу
      */
+    @Override
     public void processNewCandle(User user, Candle candle) {
         addLastPrice(user, Utility.toLastPrice(candle));
         addTimestampForUser(user, candle.getTime());
